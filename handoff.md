@@ -3,7 +3,7 @@
 **Last updated:** August 2, 2026  
 **Project:** Windows-first, local-first cat-themed desktop reminder app  
 **Runtime target:** Node.js 22 LTS + pnpm 11  
-**GitHub:** https://github.com/connorpaps/cat-reminder-app (remote: `origin`, branch: `master`)
+**GitHub:** https://github.com/connorpaps/cat-reminder-app (remote: `origin`, branch: `main` — was `master`, renamed 2026-08-02)
 
 ## Read this first
 
@@ -15,12 +15,20 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 ## Work completed this session (August 2, 2026) — GitHub setup
 
+### 14. Consolidated branches onto `main`
+
+- GitHub had auto-created a stub `main` branch (single README commit `c0adf00`, set as the default branch) alongside the real `master` branch.
+- Renamed local `master` → `main`, force-pushed it over the stub (`c0adf00...4457bf4`), deleted remote `master`, and set `main` to track `origin/main`.
+- Result: a single `main` branch holds the full project; clones now get the real code.
+
+## Work completed this session (August 2, 2026)
+
 ### 9. Initialized Git and pushed to GitHub
 
 - Initialized a Git repository in the project root.
 - Created initial commit `9d822ff` with all 172 source files (23,080 lines).
 - Added remote `origin` → `https://github.com/connorpaps/cat-reminder-app.git`.
-- Pushed `master` branch and set upstream tracking to `origin/master`.
+- Pushed `master` branch and set upstream tracking to `origin/master`. (Renamed to `main` and remote `master` deleted on 2026-08-02 — GitHub's auto-created stub `main` was replaced with the real project.)
 - `.gitignore` covers: `node_modules/`, `out/`, `release/`, `.vite/`, `coverage/`, `*.db`, `*.db-shm`, `*.db-wal`, `.env`, `.env.*` (except `.env.example`), `.playwright-cli/`.
 
 **Cross-machine workflow:**
