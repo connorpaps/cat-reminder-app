@@ -15,6 +15,12 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 ## Work completed this session (August 2, 2026) — GitHub setup
 
+### 16. Session wrap-up — final validation of the memory system
+
+- Ran the full health check: all 10 memory files present, all scripts pass syntax checks (`post-commit`, `machine-sync.sh`, `setup-memory-hooks.sh`, `memory-watcher.mjs`), `machine-sync.sh` reports up-to-date, `setup-memory-hooks.sh` verifies everything.
+- **Re-tested `MEMORY_SETUP.md` end-to-end in a brand-new empty repo** (the portability test): an AI-agent simulation extracted all embedded file blocks (now 11 files including `machine-sync.sh`), all syntax checks passed, setup ran clean, the machine-sync marker was created, a test commit fired the post-commit hook, and `.gitattributes`/`.gitignore` extracted correctly. **`MEMORY_SETUP.md` is verified port-ready — it replicates the full memory system standalone in a fresh project.**
+- Everything committed and pushed to `main`; working tree clean, 0 ahead / 0 behind.
+
 ### 15. Added machine-swap auto-sync (zero-input cross-machine work)
 
 - Added `scripts/machine-sync.sh` — a session-start check that: (1) fixes old `master` clones to `main`, (2) detects a machine change via `docs/.last-machine` (hostname marker) and re-enables memory hooks on the new machine, (3) fetches origin and pulls the latest memory files — but only when the working tree is clean, so it never clobbers uncommitted work.
@@ -366,7 +372,7 @@ Prioritize tests for:
 Before making new changes next session:
 
 - Read `knowledge.md` and this file
-- **Pull latest from GitHub:** `git pull` (if on a different machine than last session)
+- **Pull latest is automatic now** — `scripts/machine-sync.sh` runs at session start and fetches/pulls `main` when the working tree is clean (no manual `git pull` needed)
 - Check `git status --short` for uncommitted changes
 - Confirm Node/pnpm versions with `node --version` and `corepack pnpm --version`
 - Run `corepack pnpm typecheck` and `corepack pnpm test` before changing behavior
