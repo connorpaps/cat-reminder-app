@@ -47,6 +47,12 @@ git push
 git pull
 ```
 
+> **If a machine has an old clone on `master`** (created before the branch rename): the repo now uses a single `main` branch. On that machine run:
+> ```bash
+> git branch -m master main && git fetch origin && git branch --set-upstream-to=origin/main main
+> ```
+> Or just `git clone` fresh — `main` is the only branch and is what clones get by default.
+
 ### 10. Set up project memory system (Option A)
 
 - Created `AGENTS.md` — cross-tool agent instructions (session protocol + non-negotiable rules). Read automatically by Cursor and other AGENTS.md-compatible tools.
