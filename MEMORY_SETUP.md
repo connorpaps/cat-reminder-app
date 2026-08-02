@@ -35,7 +35,7 @@ All memory files are git-tracked (except the watcher's local log), so memory tra
 
 For the user's reference and for the executing AI's understanding — here is the complete picture of what running this file produces.
 
-**📁 Files created (10 total):**
+**📁 Files created (11 total):**
 
 | File | Purpose |
 |---|---|
@@ -45,15 +45,17 @@ For the user's reference and for the executing AI's understanding — here is th
 | `.githooks/post-commit` | Git hook that auto-appends every commit (date, message, files) to `docs/activity-log.md` |
 | `scripts/setup-memory-hooks.sh` | Idempotent, self-verifying hook enabler (`git config core.hooksPath .githooks`) |
 | `scripts/memory-watcher.mjs` | Optional dependency-free Node watcher; logs every file save to a local log |
+| `scripts/machine-sync.sh` | Session-start machine-swap check: detects machine change, enables hooks, pulls latest when safe |
 | `docs/activity-log.md` | Auto-generated commit history (tracked — travels with the repo) |
 | `.gitattributes` | Forces LF line endings on scripts so hooks survive Windows checkouts |
-| `.gitignore` | Adds `docs/activity-watch.log` (watcher's local log stays local) |
+| `.gitignore` | Adds `docs/activity-watch.log` (watcher's local log) and `docs/.last-machine` (local machine marker) |
 | `.cursor/rules/` | Path-scoped rules template that Cursor auto-attaches when editing matching files |
 
 **⚙️ Processes & configurations enabled:**
 - Git hooks activated — `core.hooksPath` set to `.githooks` so the commit hook runs on every commit
 - A first (test) commit is made, which **proves the hook fires** and seeds the activity log
 - All memory files are committed to git — versioned and synced across machines
+- **Machine-swap detection** — a `docs/.last-machine` hostname marker + the `machine-sync.sh` check, so switching machines auto-syncs memory with zero input
 
 **🧠 Behaviors installed — what the AI now does automatically:**
 - **Session start:** reads `handoff.md` (picks up where the last session left off) → reads `knowledge.md` (commands/architecture/constraints) → checks `git status`, recent `git log`, and the tail of `docs/activity-log.md` → runs the **bootstrap check** and self-installs the hook if this is a new machine
@@ -142,6 +144,10 @@ If the user signals the session is ending (e.g. "wrap up", "done for today", "th
 
 At session start, verify the memory system is active: run `git config core.hooksPath`. If it does **not** return `.githooks`, run `bash scripts/setup-memory-hooks.sh` before doing anything else. If memory files are missing but `MEMORY_SETUP.md` exists, replicate them from `MEMORY_SETUP.md`.
 
+### Machine sync check (auto-catch machine swaps)
+
+At session start, run `bash scripts/machine-sync.sh`. It detects a machine change (via `docs/.last-machine`), re-enables hooks on this machine, fixes old `master` clones, and pulls the latest memory files from `origin` — but only when the working tree is clean (it never clobbers uncommitted work). This means the user can start working immediately even after switching machines; no manual `git pull` needed.
+
 ## Non-negotiable rules
 
 <!-- PROJECT-SPECIFIC RULES. Examples to adapt: -->
@@ -179,6 +185,7 @@ Read automatically by Freebuff at the start of every session. This is the **cano
 This repo uses git-tracked files as its cross-session AI memory. **Freebuff reads this file (`knowledge.md`) automatically at the start of every session**; Cursor reads `AGENTS.md` instead. Follow this ritual every session:
 
 - **Bootstrap check:** Verify the memory system is active — run `git config core.hooksPath`. If it is not `.githooks`, run `bash scripts/setup-memory-hooks.sh` before doing anything else. If memory files are missing but `MEMORY_SETUP.md` exists, replicate them from `MEMORY_SETUP.md`.
+- **Machine sync check:** Run `bash scripts/machine-sync.sh` — detects machine swaps (via `docs/.last-machine`), re-enables hooks here, fixes old `master` clones, and pulls the latest memory files when the working tree is clean.
 - **Session start:** Read `handoff.md` first (last session's work + next steps), then this file, then check `git status --short`, `git log --oneline -10`, and the tail of `docs/activity-log.md` (auto-log of every commit).
 - **During work:** Log non-obvious decisions, new commands, and gotchas into this file as they are discovered. **After completing a substantial change, append a brief "Work completed" note to `handoff.md` immediately — do not wait for session end.**
 - **Session end:** Append a date-stamped "Work completed" section to `handoff.md` (what changed, why, validation run). Update this file with any new rules/commands/architecture facts. Keep both files lean (< ~200 lines); prune stale content.
@@ -452,6 +459,71 @@ Without this, a Windows checkout with `core.autocrlf=true` converts shell script
 scripts/*.mjs text eol=lf
 ````
 
+### 6.8 `scripts/machine-sync.sh`
+
+Session-start machine-swap check. Detect a machine change, re-enable hooks, fix old `master` clones, and pull the latest memory files — but only when the working tree is clean.
+
+````bash
+#!/usr/bin/env bash
+# Machine-switch sync check — run at session start by the memory protocol.
+#
+# What it does (all safe, all idempotent):
+#   1. Fixes old clones still on `master` (repo now uses `main`).
+#   2. Detects a machine change via docs/.last-machine (hostname marker) and,
+#      when changed, re-runs the memory bootstrap so hooks are enabled here.
+#   3. Fetches origin and fast-forwards to the latest memory files — but ONLY
+#      when the working tree is clean, so it never clobbers uncommitted work.
+#
+# Exits 0 always — this is a session-start convenience, never a failure gate.
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+MARKER="$ROOT/docs/.last-machine"
+HOSTNAME="$(hostname 2>/dev/null || echo unknown)"
+BRANCH="$(git branch --show-current 2>/dev/null || echo '')"
+
+echo "=== Machine sync check ==="
+
+# 1. Old-clone fix: local branch still named master, remote has main
+if [ "$BRANCH" = "master" ] && git ls-remote --heads origin main >/dev/null 2>&1; then
+  echo "→ Detected old 'master' clone — repo now uses 'main'. Renaming..."
+  git branch -m master main 2>/dev/null
+  git branch --set-upstream-to=origin/main main 2>/dev/null || true
+  BRANCH="main"
+fi
+[ -z "$BRANCH" ] && BRANCH="main"
+
+# 2. Machine change detection → re-enable memory hooks on this machine
+PREV=""
+[ -f "$MARKER" ] && PREV="$(cat "$MARKER" 2>/dev/null || true)"
+if [ -n "$PREV" ] && [ "$PREV" != "$HOSTNAME" ]; then
+  echo "→ Machine change detected: '$PREV' → '$HOSTNAME'"
+  echo "→ Re-running memory bootstrap to enable hooks here..."
+  bash "$ROOT/scripts/setup-memory-hooks.sh" >/dev/null 2>&1 || echo "  (bootstrap skipped — check scripts exist)"
+fi
+mkdir -p "$(dirname "$MARKER")"
+echo "$HOSTNAME" > "$MARKER"
+
+# 3. Fetch + pull latest when safe
+git fetch origin --quiet 2>/dev/null || echo "→ Warning: could not fetch from origin (offline?)."
+BEHIND="$(git rev-list --count HEAD..origin/"$BRANCH" 2>/dev/null || echo 0)"
+DIRTY="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+
+if [ "${BEHIND:-0}" -gt 0 ] 2>/dev/null; then
+  if [ "$DIRTY" = "0" ]; then
+    echo "→ Local is $BEHIND commit(s) behind origin/$BRANCH. Pulling latest..."
+    git pull --ff-only origin "$BRANCH" 2>&1 || echo "→ Pull failed — resolve manually."
+  else
+    echo "→ Local is $BEHIND commit(s) behind, but working tree is dirty — NOT auto-pulling."
+    echo "  Commit or stash first, then run: git pull"
+  fi
+else
+  echo "→ Up to date with origin/$BRANCH."
+fi
+
+echo "=== Machine sync check done ==="
+````
+
 ### 6.7 `docs/activity-log.md` (auto-generated)
 
 Create with this header — the hook appends entries below it:
@@ -486,8 +558,10 @@ The two protocol files (`knowledge.md` and `AGENTS.md`) each contain this rule:
 - [ ] `git config core.hooksPath` returns `.githooks`
 - [ ] `AGENTS.md`, `knowledge.md`, `handoff.md` exist at repo root
 - [ ] `.githooks/post-commit` exists and `scripts/setup-memory-hooks.sh` ran clean
+- [ ] `scripts/machine-sync.sh` exists and runs clean (`bash scripts/machine-sync.sh`)
 - [ ] `docs/activity-log.md` exists with the header
 - [ ] `docs/activity-watch.log` is gitignored (`git check-ignore docs/activity-watch.log`)
+- [ ] `docs/.last-machine` is gitignored (`git check-ignore docs/.last-machine`)
 - [ ] Make a test commit → `docs/activity-log.md` gains an entry with the files changed
 - [ ] (Optional) `node scripts/memory-watcher.mjs` logs a save event
 - [ ] Session protocol present in both `knowledge.md` and `AGENTS.md`
@@ -505,4 +579,4 @@ The two protocol files (`knowledge.md` and `AGENTS.md`) each contain this rule:
 | `.cursor/rules/*.mdc` | Globs + conventions per source area |
 | Watcher `IGNORED_DIRS` | Add your build/output dirs |
 
-Everything else — the session protocol, the git hook, the setup script, the activity log — is **copy-paste identical** across projects.
+Everything else — the session protocol, the git hook, the setup script, the machine-sync check, the activity log — is **copy-paste identical** across projects.

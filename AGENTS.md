@@ -14,6 +14,10 @@ This repo uses git-tracked files as its cross-session AI memory. The goal: no re
 
 At session start, verify the memory system is active: run `git config core.hooksPath`. If it does **not** return `.githooks`, run `bash scripts/setup-memory-hooks.sh` before doing anything else. If memory files are missing but `MEMORY_SETUP.md` exists, replicate them from `MEMORY_SETUP.md`.
 
+### Machine sync check (auto-catch machine swaps)
+
+At session start, run `bash scripts/machine-sync.sh`. It detects a machine change (via `docs/.last-machine`), re-enables hooks on this machine, fixes old `master` clones, and pulls the latest memory files from `origin` — but only when the working tree is clean (it never clobbers uncommitted work). This means the user can start working immediately even after switching machines; no manual `git pull` needed.
+
 ### At session start
 
 1. Read `handoff.md` — the last session's work and the prioritized next steps.

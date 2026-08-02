@@ -15,6 +15,14 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 ## Work completed this session (August 2, 2026) — GitHub setup
 
+### 15. Added machine-swap auto-sync (zero-input cross-machine work)
+
+- Added `scripts/machine-sync.sh` — a session-start check that: (1) fixes old `master` clones to `main`, (2) detects a machine change via `docs/.last-machine` (hostname marker) and re-enables memory hooks on the new machine, (3) fetches origin and pulls the latest memory files — but only when the working tree is clean, so it never clobbers uncommitted work.
+- Added the **machine sync check** to the session protocol in `knowledge.md` + `AGENTS.md`, so it runs automatically at the start of every session.
+- Added `docs/.last-machine` to `.gitignore` (machine-local state).
+- Added the script to `MEMORY_SETUP.md` (new §6.8, 11-file inventory, checklist) and to the setup script's verified-file list.
+- Result: switching machines requires **zero manual steps** — the agent detects the swap, syncs memory, and you can start working immediately.
+
 ### 14. Consolidated branches onto `main`
 
 - GitHub had auto-created a stub `main` branch (single README commit `c0adf00`, set as the default branch) alongside the real `master` branch.

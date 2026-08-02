@@ -10,7 +10,7 @@ git config core.hooksPath .githooks
 
 # 2. Verify the required memory files exist (so the agent knows what to replicate)
 MISSING=()
-for f in AGENTS.md knowledge.md handoff.md .githooks/post-commit scripts/setup-memory-hooks.sh scripts/memory-watcher.mjs docs/activity-log.md; do
+for f in AGENTS.md knowledge.md handoff.md .githooks/post-commit scripts/setup-memory-hooks.sh scripts/memory-watcher.mjs scripts/machine-sync.sh docs/activity-log.md; do
   [ -f "$f" ] || MISSING+=("$f")
 done
 
