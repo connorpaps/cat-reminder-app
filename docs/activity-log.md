@@ -209,3 +209,14 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
 **Document master->main migration one-liner in handoff**
 
   - handoff.md
+
+## 2026-08-02 19:30 — `bc541fb`
+**Add machine-swap auto-sync: detect machine change, enable hooks, pull latest safely at session start**
+
+  - .gitignore
+  - AGENTS.md
+  - MEMORY_SETUP.md
+  - handoff.md
+  - knowledge.md
+  - scripts/machine-sync.sh
+  - scripts/setup-memory-hooks.sh
