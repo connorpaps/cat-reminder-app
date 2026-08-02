@@ -204,3 +204,8 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
 **Update handoff: branch consolidated onto main**
 
   - handoff.md
+
+## 2026-08-02 19:25 — `d0e658c`
+**Document master->main migration one-liner in handoff**
+
+  - handoff.md
