@@ -220,3 +220,8 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - knowledge.md
   - scripts/machine-sync.sh
   - scripts/setup-memory-hooks.sh
+
+## 2026-08-02 19:33 — `a54431a`
+**Session wrap-up: document final memory-system validation in handoff**
+
+  - handoff.md
