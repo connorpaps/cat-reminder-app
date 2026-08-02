@@ -182,3 +182,20 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - tsconfig.json
   - vitest.config.ts
 
+
+## 2026-08-02 19:19 — `a8b7942`
+**Add AI memory system: session protocol, auto commit-log hook, watcher, and MEMORY_SETUP.md replication kit**
+
+  - .cursor/rules/main-process.mdc
+  - .cursor/rules/renderer.mdc
+  - .gitattributes
+  - .githooks/post-commit
+  - .gitignore
+  - AGENTS.md
+  - MEMORY_SETUP.md
+  - docs/activity-log.md
+  - handoff.md
+  - knowledge.md
+  - memory_ideas.md
+  - scripts/memory-watcher.mjs
+  - scripts/setup-memory-hooks.sh
