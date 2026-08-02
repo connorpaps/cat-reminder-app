@@ -1,0 +1,12 @@
+node_modules/
+out/
+release/
+.vite/
+coverage/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+.playwright-cli/

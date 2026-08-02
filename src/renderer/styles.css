@@ -1,0 +1,216 @@
+:root { color-scheme: dark; font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; font-synthesis: none; }
+body { margin: 0; background: transparent; }
+* { box-sizing: border-box; margin: 0; }
+button { font: inherit; cursor: pointer; }
+input, select { font: inherit; }
+
+/* ── Overlay styles ── */
+.overlay-document, .overlay-document body { width: 100%; height: 100%; min-width: 0; min-height: 0; background: transparent; overflow: hidden; }
+.overlay-document #root { width: 100%; height: 100%; }
+.overlay-stage { position: relative; width: 100%; height: 100vh; min-width: 0; min-height: 0; overflow: hidden; pointer-events: none; }
+.cat-scene { position: absolute; bottom: 28px; transform: translateX(-50%); pointer-events: none; }
+.cat-sprite { position: absolute; left: 50%; bottom: 0; background-repeat: no-repeat; transform: translateX(-50%); transform-origin: center; image-rendering: pixelated; animation: cat-bob .32s steps(2) infinite; pointer-events: none; }
+.compact-textbox { position: absolute; top: 66px; left: 50%; z-index: 2; overflow: hidden; transform: translateX(-50%); background-repeat: no-repeat; image-rendering: pixelated; color: #422517; filter: drop-shadow(5px 6px 0 #24140d88); pointer-events: auto; }
+.compact-textbox-content { position: relative; z-index: 1; display: grid; gap: 3px; height: 100%; padding: 25px 20px 10px; pointer-events: auto; }
+.compact-textbox-content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; line-height: 1.05; }
+.compact-textbox-content span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.overlay-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; pointer-events: auto; }
+.overlay-actions button { border: 1px solid #704530; border-radius: 3px; padding: 4px 8px; color: #422517; background: #e6c18f; font-size: 10px; font-weight: 800; }
+.overlay-actions button:hover { color: #f3e9cb; background: #704530; }
+.overlay-actions .bubble-primary { color: #f3e9cb; background: #422517; }
+.reduced-motion, .reduced-motion .cat-sprite { animation: none !important; }
+@keyframes cat-bob { 50% { margin-top: -3px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } .cat-sprite { animation: none; } }
+
+/* ── Popup styles ── */
+.popup-shell {
+  width: 100%; min-height: 100vh;
+  display: grid; place-items: center;
+  background: transparent;
+  padding: 2px;
+  image-rendering: pixelated;
+}
+
+.popup-panel {
+  width: 260px;
+  display: grid; gap: 0;
+  background: #bc7f54;
+  color: #24140d;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 12px 12px;
+  /* pixel-art border via layered box-shadows */
+  box-shadow:
+    /* outer dark border (2px) */
+    0 0 0 2px #4a2c1d,
+    0 0 0 3px #6b3f27,
+    /* top highlight bevel */
+    inset 0 2px 0 0 #a57252,
+    /* bottom shadow bevel */
+    inset 0 -2px 0 0 #24140d44,
+    /* left highlight */
+    inset 2px 0 0 0 #a5725288,
+    /* right shadow */
+    inset -2px 0 0 0 #24140d44;
+  image-rendering: pixelated;
+}
+
+.popup-section {
+  display: grid; gap: 6px;
+  padding: 6px 0;
+}
+
+.popup-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: #5a3824;
+  font-weight: 800;
+}
+
+.popup-divider {
+  border: 0;
+  height: 2px;
+  background: #a5725288;
+  margin: 2px 0;
+  image-rendering: pixelated;
+}
+
+.popup-btn {
+  border: 2px solid #4a2c1d;
+  background: #d4a474;
+  color: #24140d;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-align: center;
+  image-rendering: pixelated;
+  transition: background .12s, transform .08s;
+}
+.popup-btn:hover {
+  background: #e8bc8c;
+  transform: translateY(-1px);
+}
+.popup-btn:active {
+  background: #b8845a;
+  transform: translateY(1px);
+}
+
+.popup-btn-primary {
+  background: #6b3f27;
+  color: #f3e9cb;
+  border-color: #4a2c1d;
+}
+.popup-btn-primary:hover { background: #7d4e34; }
+.popup-btn-primary:active { background: #4a2c1d; }
+
+.popup-btn-cat {
+  background: #e6c18f;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.popup-btn-ghost {
+  background: transparent;
+  border: 2px solid #8b5e3c;
+  color: #4a2c1d;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.popup-btn-ghost:hover { background: #d4a47488; }
+
+.popup-btn-text {
+  background: transparent;
+  border: 0;
+  color: #5a3824;
+  font-size: 11px;
+  padding: 4px 6px;
+  text-decoration: underline;
+}
+.popup-btn-text:hover { color: #24140d; }
+
+.popup-btn-quit {
+  background: #4a2c1d;
+  color: #d4a474;
+  border-color: #2e1a10;
+  font-size: 11px;
+  padding: 5px 10px;
+}
+.popup-btn-quit:hover { background: #5a3824; color: #f3e9cb; }
+
+.popup-row {
+  display: flex; gap: 6px;
+  align-items: center;
+}
+
+.popup-status {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px;
+  color: #4a2c1d;
+}
+.popup-status small { color: #6b3f27; font-weight: 400; }
+
+.popup-dot {
+  width: 7px; height: 7px;
+  border-radius: 2px;
+  background: #4a2c1d;
+  image-rendering: pixelated;
+}
+.popup-dot.on { background: #3b7a3b; }
+
+.popup-calendar-list {
+  display: grid; gap: 3px;
+  max-height: 72px; overflow-y: auto;
+}
+
+.popup-calendar-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: #4a2c1d;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.popup-calendar-item input {
+  width: 13px; height: 13px;
+  accent-color: #6b3f27;
+  image-rendering: pixelated;
+}
+
+.popup-settings-grid {
+  display: grid; gap: 5px;
+}
+
+.popup-setting {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: #4a2c1d;
+}
+.popup-setting select {
+  border: 2px solid #6b3f27;
+  background: #d4a474;
+  color: #24140d;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 4px;
+  image-rendering: pixelated;
+}
+.popup-setting select:focus { outline: 2px solid #4a2c1d; outline-offset: -1px; }
+
+.popup-notice {
+  color: #3b7a3b;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 0 0;
+}
+
+.popup-error {
+  color: #a33;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  padding: 4px 0 0;
+}
+
+.popup-sync-age {
+  color: #6b3f27;
+  font-weight: 400;
+}

@@ -1,0 +1,8 @@
+{
+  "id": "default-cat",
+  "displayName": "Default Cat",
+  "animations": {
+    "idle": { "src": "idle.png", "frameWidth": 64, "frameHeight": 64, "frameCount": 6, "fps": 8, "scale": 3 },
+    "running": { "src": "running.png", "frameWidth": 64, "frameHeight": 64, "frameCount": 6, "fps": 10, "scale": 3 }
+  }
+}
