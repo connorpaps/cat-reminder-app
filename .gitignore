@@ -10,3 +10,5 @@ coverage/
 .env.*
 !.env.example
 .playwright-cli/
+# Auto-memory local watcher log (raw per-save events; the commit log is tracked)
+docs/activity-watch.log

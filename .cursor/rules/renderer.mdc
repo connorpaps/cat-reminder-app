@@ -1,0 +1,10 @@
+---
+description: Conventions for renderer UI code (popup and overlay)
+globs: src/renderer/**
+alwaysApply: false
+---
+- Renderer and overlay use separate context-isolated preload bridges; never expose raw Electron or Node APIs to either window.
+- The overlay uses the supplied 384×64 six-frame sprite sheets at pixelated scaling.
+- The popup is a compact pixel-art panel (274×416) that auto-closes on blur.
+- Snooze and Motion settings are hidden from the UI but kept in code (defaults: 10 min, Balanced) — restore by re-adding the UI elements, not by deleting backend logic.
+- Preserve the pixel-art aesthetic (box-shadow borders matching textbox.png brown/tan palette).

@@ -8,6 +8,19 @@
 - `src/shared/` owns domain types, validation, recurrence, state transitions, IPC contracts, and animation metadata.
 - `tests/` contains unit tests for rule-heavy behavior; `public/assets/` contains packaged cat sprites and textbox art.
 
+## Session protocol (AI memory system)
+
+This repo uses git-tracked files as its cross-session AI memory. **Freebuff reads this file (`knowledge.md`) automatically at the start of every session**; Cursor reads `AGENTS.md` instead. Follow this ritual every session:
+
+- **Bootstrap check (auto-setup on new machines):** At session start, run `git config core.hooksPath`. If it does **not** return `.githooks`, run `bash scripts/setup-memory-hooks.sh` before doing anything else. If memory files are missing but `MEMORY_SETUP.md` exists, replicate them from `MEMORY_SETUP.md`.
+- **Session start:** Read `handoff.md` first (last session's work + next steps), then this file, then check `git status --short`, `git log --oneline -10`, and the tail of `docs/activity-log.md` (auto-log of every commit).
+- **During work:** Log non-obvious decisions, new commands, and gotchas into this file as they are discovered. **After completing a substantial change, append a brief "Work completed" note to `handoff.md` immediately — do not wait for session end.**
+- **Session end:** Append a date-stamped "Work completed" section to `handoff.md` (what changed, why, validation run). Update this file with any new rules/commands/architecture facts. Keep both files lean (< ~200 lines); prune stale content.
+- **Wrap-up signals:** If the user says the session is ending (e.g. "wrap up", "done for today", "that's all", "update the handoff"), update `handoff.md` + this file **even if not explicitly asked** — do not wait to be told.
+- Update `AGENTS.md` only when a rule must also bind Cursor/other tools — this file stays the single source of truth.
+
+**Automatic memory (no input needed):** a git `post-commit` hook (`.githooks/post-commit`) appends every commit to `docs/activity-log.md`; `node scripts/memory-watcher.mjs` (optional) logs every file save to `docs/activity-watch.log` (gitignored). These are mechanical records — the agent still owns writing the *why* into `handoff.md`/this file.
+
 ## Commands
 - Install: `pnpm install` (Corepack can provide pnpm; the current environment does not have pnpm installed).
 - Development: `pnpm dev`.

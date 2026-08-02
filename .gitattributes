@@ -1,0 +1,5 @@
+# Force LF line endings on shell scripts — CRLF breaks the shebang in git hooks
+# and bash scripts on Windows checkouts (core.autocrlf=true would convert them).
+*.sh text eol=lf
+.githooks/* text eol=lf
+scripts/*.mjs text eol=lf

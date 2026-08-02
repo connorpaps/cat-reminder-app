@@ -1,0 +1,11 @@
+---
+description: Conventions for Electron main process code (windows, tray, storage, scheduler, sync)
+globs: src/main/**
+alwaysApply: false
+---
+- SQLite is accessed only by the main process through repositories with versioned migrations; never open DB connections in renderers.
+- Keep `better-sqlite3` native config intact: `@electron/rebuild`, `npmRebuild`, `asarUnpack: ["**/*.node"]`.
+- Overlay windows must remain click-through while idle and become interactive only while presenting an alert.
+- Google Calendar/Tasks sync is read-only with loopback OAuth; credentials live in `.env` and are never committed.
+- All stored timestamps are ISO 8601; recurrence calculations must respect the reminder timezone (test DST, sleep/wake, restart, monitor changes).
+- The app is a pure tray app: no main settings window — the tray click opens the popup.

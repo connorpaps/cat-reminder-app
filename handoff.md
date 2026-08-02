@@ -1,8 +1,9 @@
 # Cat Reminder — Session Handoff
 
-**Last updated:** August 1, 2026  
+**Last updated:** August 2, 2026  
 **Project:** Windows-first, local-first cat-themed desktop reminder app  
-**Runtime target:** Node.js 22 LTS + pnpm 11
+**Runtime target:** Node.js 22 LTS + pnpm 11  
+**GitHub:** https://github.com/connorpaps/cat-reminder-app (remote: `origin`, branch: `master`)
 
 ## Read this first
 
@@ -11,6 +12,69 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 **The app is a pure tray app.** There is no main settings window — clicking the cat tray icon opens a small pixel-art popup near the taskbar. The popup auto-closes when clicking elsewhere. On first launch (no Google account connected), the popup auto-opens.
 
 **Single-instance lock is active.** Running `pnpm dev` twice or double-clicking the executable will focus the existing instance instead of spawning a duplicate tray icon.
+
+## Work completed this session (August 2, 2026) — GitHub setup
+
+### 9. Initialized Git and pushed to GitHub
+
+- Initialized a Git repository in the project root.
+- Created initial commit `9d822ff` with all 172 source files (23,080 lines).
+- Added remote `origin` → `https://github.com/connorpaps/cat-reminder-app.git`.
+- Pushed `master` branch and set upstream tracking to `origin/master`.
+- `.gitignore` covers: `node_modules/`, `out/`, `release/`, `.vite/`, `coverage/`, `*.db`, `*.db-shm`, `*.db-wal`, `.env`, `.env.*` (except `.env.example`), `.playwright-cli/`.
+
+**Cross-machine workflow:**
+```bash
+# On Mac: clone and install
+git clone https://github.com/connorpaps/cat-reminder-app.git
+cd cat-reminder-app
+pnpm install
+
+# Work, then push when done
+git add -A
+git commit -m "Describe changes"
+git push
+
+# Back on PC: pull latest
+git pull
+```
+
+### 10. Set up project memory system (Option A)
+
+- Created `AGENTS.md` — cross-tool agent instructions (session protocol + non-negotiable rules). Read automatically by Cursor and other AGENTS.md-compatible tools.
+- Added a **Session protocol** section to `knowledge.md` — Freebuff auto-reads this file every session, so the ritual (read `handoff.md` + this file at start, update both at end) now runs without prompting.
+- Added `.cursor/rules/main-process.mdc` and `.cursor/rules/renderer.mdc` — path-scoped rules Cursor auto-attaches when editing `src/main/**` / `src/renderer/**`.
+- Updated `memory_ideas.md` status; global `~/.AGENTS.md` intentionally skipped (project-local only for now).
+
+### 11. Added automatic memory (zero-input)
+
+New files:
+
+- `.githooks/post-commit` — git hook that auto-appends date, commit message, and changed files to `docs/activity-log.md` after **every commit** (works for commits made by Freebuff, Cursor, or manually).
+- `scripts/setup-memory-hooks.sh` — one-time `git config core.hooksPath .githooks` to enable the hook (must be run on each machine, e.g. after `git pull` on the Mac).
+- `scripts/memory-watcher.mjs` — optional dependency-free Node watcher that logs every file save to `docs/activity-watch.log` (gitignored). Start with `node scripts/memory-watcher.mjs`.
+
+Updated:
+
+- `knowledge.md` + `AGENTS.md` — protocol now says to read the tail of `docs/activity-log.md` at session start and to log substantial changes to `handoff.md` immediately, not just at session end.
+- `.gitignore` — added `docs/activity-watch.log`.
+
+This gives a mechanical, zero-input safety net (every commit is recorded automatically) underneath the agent-written handoff memory.
+
+### 12. Added MEMORY_SETUP.md + auto-bootstrap on new machines
+
+- Created `MEMORY_SETUP.md` — a fully self-contained replication kit. An AI agent given only this file can set up the entire memory system (all files, rules, hooks, processes) in a brand-new project with zero prior setup. Includes templates for `AGENTS.md`, `knowledge.md`, `handoff.md`, the git hook, setup script, watcher, `.cursor/rules`, `.gitignore`, and a verification checklist.
+- Made `scripts/setup-memory-hooks.sh` **idempotent and self-verifying** — it now checks that all memory files exist and exits with a warning listing any missing ones (so agents can auto-replicate from `MEMORY_SETUP.md`).
+- Added a **bootstrap check** to the session protocol in both `knowledge.md` and `AGENTS.md`: at session start, if `git config core.hooksPath` is not `.githooks`, run `bash scripts/setup-memory-hooks.sh` automatically. This makes the memory system **self-install on a new machine** — after `git pull` on the Mac (or any fresh clone), the first session auto-detects and enables the hook with zero user input.
+
+**To use in a brand-new project:** copy `MEMORY_SETUP.md` in and tell the AI "set up the memory system from MEMORY_SETUP.md".
+
+### 13. Finalized MEMORY_SETUP.md and pushed to GitHub
+
+- Added a **"Full inventory"** section to `MEMORY_SETUP.md` (§1): every file created, every process enabled, every behavior installed, and the automatic verification — for both the user's reference and the executing AI's understanding.
+- Made all embedded file blocks use consistent 4-backtick fences so any reader (LLM or script) extracts them identically.
+- Verified end-to-end: simulated a brand-new empty git repo with ONLY `MEMORY_SETUP.md` — the AI flow created all 10 files, enabled hooks, made a test commit, and the hook fired correctly.
+- Committed the full memory system (AGENTS.md, knowledge.md, MEMORY_SETUP.md, .githooks/, scripts/, .cursor/rules/, .gitattributes, docs/) and pushed to GitHub.
 
 ## Work completed this session (August 2, 2026)
 
@@ -187,10 +251,13 @@ Important files and responsibilities:
 - `src/shared/` — shared types, IPC contracts, validation, recurrence, state, and animation metadata
 - `tests/` — unit tests for recurrence, queueing, validation, animation, state transitions, and calendar sync
 - `public/assets/` — cat sprites and textbox art
-- `knowledge.md` — project conventions, commands, architecture, constraints, and known setup gotchas
+- `knowledge.md` — project conventions, commands, architecture, constraints, and known setup gotchas (auto-read by Freebuff each session)
+- `AGENTS.md` — cross-tool agent instructions + session protocol (auto-read by Cursor and other tools)
+- `.cursor/rules/` — path-scoped Cursor rules for `src/main/**` and `src/renderer/**`
 - `handoff.md` — this file
 - `package.json` — scripts, dependencies, Electron Builder configuration, and Node engine range
 - `.env` — created from `.env.example`; fill in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to enable calendar sync
+- `.gitignore` — excludes node_modules, build output, databases, env files, and generated artifacts
 
 ## Validation completed this session
 
@@ -277,9 +344,11 @@ Prioritize tests for:
 Before making new changes next session:
 
 - Read `knowledge.md` and this file
-- Check `git status --short` if Git is configured
+- **Pull latest from GitHub:** `git pull` (if on a different machine than last session)
+- Check `git status --short` for uncommitted changes
 - Confirm Node/pnpm versions with `node --version` and `corepack pnpm --version`
 - Run `corepack pnpm typecheck` and `corepack pnpm test` before changing behavior
 - Restart the dev app after source/build changes
 - Prefer source changes under `src/`; do not hand-edit generated files under `out/`
 - After significant code changes, run code review plus typecheck, tests, and build
+- **Push when done:** `git add -A && git commit -m "..." && git push`

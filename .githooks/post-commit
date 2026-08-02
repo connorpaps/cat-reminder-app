@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Auto-memory hook: appends a dated entry (commit hash, message, changed files)
+# to docs/activity-log.md after every commit. Runs for commits made by any tool
+# (Freebuff, Cursor, or manual), with zero user input.
+#
+# Requires: git config core.hooksPath .githooks  (run scripts/setup-memory-hooks.sh once)
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+LOG="$ROOT/docs/activity-log.md"
+mkdir -p "$(dirname "$LOG")"
+
+# Skip if the only changed file is the activity log itself (avoids feedback loops)
+# --root includes the initial commit's files (root commit has no parent)
+# -m --first-parent handles merge commits (diff-tree shows nothing for merges by default)
+CHANGED="$(git diff-tree --root -m --first-parent --no-commit-id --name-only -r HEAD)"
+if [ "$CHANGED" = "docs/activity-log.md" ]; then
+  exit 0
+fi
+
+HASH="$(git rev-parse --short HEAD)"
+MSG="$(git log -1 --pretty=%s)"
+DATE="$(date '+%Y-%m-%d %H:%M')"
+
+{
+  echo ""
+  echo "## $DATE — \`$HASH\`"
+  echo "**$MSG**"
+  echo ""
+  echo "$CHANGED" | sed 's/^/  - /'
+} >> "$LOG"
