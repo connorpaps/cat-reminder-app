@@ -199,3 +199,8 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - memory_ideas.md
   - scripts/memory-watcher.mjs
   - scripts/setup-memory-hooks.sh
+
+## 2026-08-02 19:23 — `1299c05`
+**Update handoff: branch consolidated onto main**
+
+  - handoff.md
