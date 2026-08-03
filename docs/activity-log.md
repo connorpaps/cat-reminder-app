@@ -362,3 +362,15 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - src/shared/types/preferences.ts
   - src/shared/validation/runtime.ts
   - tests/shared/animation.test.ts
+
+## 2026-08-03 00:19 — `dc99bd0`
+**Fix cat orientations and popup layout**
+
+  - public/assets/cats/black/idle.png
+  - public/assets/cats/black/running.png
+  - scripts/extract-cats.mjs
+  - scripts/sprite-utils.mjs
+  - src/main/windows/popup-window.ts
+  - src/renderer/popup/PopupApp.tsx
+  - src/renderer/styles.css
+  - tests/shared/sprite-utils.test.ts
