@@ -31,6 +31,5 @@ export class TriggerQueue {
   }
 
   isActive(): boolean { return this.active !== null }
-  activeId(): string | null { return this.active?.id ?? null }
   size(): number { return this.pending.length }
 }

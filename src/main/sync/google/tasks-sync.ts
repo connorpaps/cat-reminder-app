@@ -74,6 +74,11 @@ export class GoogleTasksSyncService {
     let imported = 0
     let updated = 0
     let skipped = 0
+    const existingById = new Map(
+      this.repository.list()
+        .filter((item) => item.source === 'google-tasks')
+        .map((item) => [`${item.sourceCalendarId}:${item.sourceEventId}`, item])
+    )
 
     for (const task of tasks) {
       const reminder = taskToReminder(task, now)
@@ -83,9 +88,7 @@ export class GoogleTasksSyncService {
         skipped += 1
         continue
       }
-      const existing = this.repository.list().find(
-        (item) => item.sourceEventId === task.id && item.sourceCalendarId === task.taskListId && item.source === 'google-tasks'
-      )
+      const existing = existingById.get(`${task.taskListId}:${task.id}`)
       this.repository.upsertImported(reminder)
       if (existing) updated += 1
       else imported += 1

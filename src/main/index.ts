@@ -186,6 +186,8 @@ async function runTickTickSync(): Promise<TickTickSyncResult | null> {
     }
     ticktickLastSyncAt = result.syncedAt
     ticktickSyncError = undefined
+    // Persist so the "Synced Xm ago" indicator survives restarts (same as Google).
+    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds, lastSuccessAt: result.syncedAt }, 'ticktick')
     return result
   } catch (error) {
     ticktickSyncError = error instanceof Error ? error.message : 'TickTick sync failed.'
@@ -395,7 +397,6 @@ function registerIpc(): void {
     app.setLoginItemSettings({ openAtLogin: app.isPackaged && next.launchAtLogin, openAsHidden: next.openInTray })
     return next
   })
-  ipcMain.handle('app:open-settings', () => { showPopupWindow(); return undefined })
   ipcMain.handle('app:test-overlay', async () => {
     const now = new Date()
     const reminder = reminderRepository.create({ title: 'A tiny cat reminder', description: 'This is a local overlay test.', startAt: new Date(now.getTime() + 5_000).toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, priority: 'normal' })

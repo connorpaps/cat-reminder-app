@@ -22,7 +22,8 @@ function fromRow(row: ReminderRow): Reminder {
   }
 }
 
-function toValues(reminder: Reminder): unknown[] {    return [reminder.id, reminder.kind, reminder.title, reminder.description ?? null, reminder.startAt, reminder.endAt ?? null,
+function toValues(reminder: Reminder): unknown[] {
+  return [reminder.id, reminder.kind, reminder.title, reminder.description ?? null, reminder.startAt, reminder.endAt ?? null,
     reminder.timezone, reminder.repeatRule ? JSON.stringify(reminder.repeatRule) : null, reminder.priority,
     reminder.status, reminder.enabled ? 1 : 0, reminder.source, reminder.sourceEventId ?? null, reminder.sourceCalendarId ?? null,
     reminder.snoozeUntil ?? null, reminder.seriesId ?? null, reminder.occurrenceKey ?? null,
@@ -129,9 +130,9 @@ export class ReminderRepository {
   private insert(reminder: Reminder, upsert = false): void {
     const values = toValues(reminder)
     if (!upsert) {
-    this.db.prepare(`INSERT INTO reminders
-      (id,kind,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values)
+      this.db.prepare(`INSERT INTO reminders
+        (id,kind,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values)
       return
     }
     this.db.prepare(`INSERT INTO reminders

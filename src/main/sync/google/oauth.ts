@@ -1,4 +1,4 @@
-import { createServer } from 'node:http'
+import { createServer, type ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { shell } from 'electron'
 import { google } from 'googleapis'
@@ -29,11 +29,20 @@ export async function openGoogleAuthorization(config: OAuthConfig): Promise<{ co
 
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => { server.close(); reject(new Error('Google authorization timed out')) }, 5 * 60_000)
+    const fail = (response: ServerResponse, message: string, error: Error): void => {
+      clearTimeout(timeout)
+      response.writeHead(400)
+      response.end(message)
+      server.close()
+      reject(error)
+    }
     server.on('request', (request, response) => {
       const requestUrl = new URL(request.url ?? '/', redirectUri)
-      if (requestUrl.searchParams.get('state') !== state) { response.writeHead(400); response.end('Invalid OAuth state'); return }
+      // Every path must close the listener (like the TickTick flow) so a failed
+      // attempt never leaks the port or leaves the caller hanging until timeout.
+      if (requestUrl.searchParams.get('state') !== state) { fail(response, 'Invalid OAuth state', new Error('OAuth state mismatch')); return }
       const code = requestUrl.searchParams.get('code')
-      if (!code) { response.writeHead(400); response.end('Authorization was not granted'); return }
+      if (!code) { fail(response, 'Authorization was not granted', new Error('Authorization was not granted')); return }
       clearTimeout(timeout); response.writeHead(200, { 'Content-Type': 'text/html' }); response.end('<p>You can return to Cat Reminder.</p>')
       server.close(); resolve({ code, redirectUri })
     })

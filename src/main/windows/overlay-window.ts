@@ -81,6 +81,9 @@ async function createOverlayWindow(): Promise<void> {
     })
     const currentWindow = visualWindow
     visualWindow.setAlwaysOnTop(true, 'floating')
+    // Hardening: the overlay never opens child windows and never navigates away.
+    visualWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    visualWindow.webContents.on('will-navigate', (event) => event.preventDefault())
     visualWindow.setIgnoreMouseEvents(true, { forward: true })
     visualWindow.on('closed', () => {
       // Electron destroys webContents before emitting `closed`; compare the

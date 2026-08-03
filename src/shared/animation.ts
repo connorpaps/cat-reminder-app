@@ -106,13 +106,3 @@ export function spriteOffset(manifest: SpriteAnimationManifest, frame: number): 
   const safeFrame = ((frame % manifest.frameCount) + manifest.frameCount) % manifest.frameCount
   return `-${safeFrame * manifest.frameWidth * manifest.scale}px 0px`
 }
-
-export function traversalProgress(elapsedMs: number, durationMs = CAT_TRAVEL_DURATION_MS): number {
-  if (durationMs <= 0) return 1
-  return Math.min(1, Math.max(0, elapsedMs / durationMs))
-}
-
-export function traversalPositionPercent(progress: number): number {
-  const safeProgress = Math.min(1, Math.max(0, progress))
-  return CAT_TRAVEL_START_PERCENT + (CAT_TRAVEL_END_PERCENT - CAT_TRAVEL_START_PERCENT) * safeProgress
-}

@@ -34,7 +34,6 @@ export type TickTickApi = {
 }
 
 export type AppApi = {
-  openSettings: () => Promise<void>
   showTestOverlay: () => Promise<void>
   quit: () => Promise<void>
 }

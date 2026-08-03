@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAT_PAUSE_DURATION_MS, CAT_PAUSE_POSITION_PERCENT, CAT_TRAVEL_DURATION_MS, CAT_TRAVEL_END_PERCENT, CAT_TRAVEL_START_PERCENT, DEFAULT_CAT_ANIMATIONS, exitDurationMs, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, traversalPositionPercent, traversalProgress, walkDurationMs } from '../../src/shared/animation'
+import { CAT_PAUSE_DURATION_MS, CAT_PAUSE_POSITION_PERCENT, CAT_TRAVEL_DURATION_MS, CAT_TRAVEL_END_PERCENT, CAT_TRAVEL_START_PERCENT, DEFAULT_CAT_ANIMATIONS, exitDurationMs, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, walkDurationMs } from '../../src/shared/animation'
 
 describe('cat animation metadata', () => {
   it('describes six 64px frames for the supplied running sheet', () => {
@@ -16,14 +16,6 @@ describe('cat animation metadata', () => {
     expect(DEFAULT_CAT_ANIMATIONS.running.feetPaddingPx).toBe(5)
     // Rendered drop = padding * integer scale (3x).
     expect(DEFAULT_CAT_ANIMATIONS.running.feetPaddingPx * DEFAULT_CAT_ANIMATIONS.running.scale).toBe(15)
-  })
-
-  it('traverses from offscreen left to offscreen right', () => {
-    expect(traversalProgress(-1)).toBe(0)
-    expect(traversalProgress(CAT_TRAVEL_DURATION_MS / 2)).toBeCloseTo(0.5)
-    expect(traversalProgress(CAT_TRAVEL_DURATION_MS + 1)).toBe(1)
-    expect(traversalPositionPercent(0)).toBe(-12)
-    expect(traversalPositionPercent(1)).toBe(112)
   })
 
   it('slows the traversal by 10% (12_375ms → 13_613ms)', () => {

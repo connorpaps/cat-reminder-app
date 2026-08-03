@@ -258,3 +258,25 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - tests/shared/task-rollup.test.ts
   - tests/shared/tasks-sync.test.ts
   - tests/shared/validation.test.ts
+
+## 2026-08-02 22:25 — `fa2952a`
+**Add TickTick display-only integration; document OAuth debugging in handoff**
+
+  - .env.example
+  - handoff.md
+  - knowledge.md
+  - src/main/index.ts
+  - src/main/storage/reminder-repository.ts
+  - src/main/storage/secure-token-store.ts
+  - src/main/storage/sync-repository.ts
+  - src/main/sync/ticktick/oauth.ts
+  - src/main/sync/ticktick/ticktick-sync.ts
+  - src/main/windows/popup-window.ts
+  - src/preload/index.ts
+  - src/renderer/popup/PopupApp.tsx
+  - src/renderer/styles.css
+  - src/shared/ipc.ts
+  - src/shared/types/reminder.ts
+  - src/shared/types/sync.ts
+  - src/shared/types/ticktick.ts
+  - tests/shared/ticktick-sync.test.ts

@@ -71,8 +71,9 @@ export function PopupApp() {
   }
 
   async function disconnectAccount() {
+    // The main process decides whether auto-sync stays on (it stays on while
+    // TickTick is still connected), so the UI must not force it off here.
     const status = await window.catReminder.sync.disconnect()
-    await updatePreference('syncEnabled', false)
     setSync(status)
   }
 

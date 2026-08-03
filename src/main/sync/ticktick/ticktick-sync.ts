@@ -66,15 +66,18 @@ export class TickTickSyncService {
     let imported = 0
     let updated = 0
     const activeTaskIds = new Set<string>()
+    const existingById = new Map(
+      this.repository.list()
+        .filter((item) => item.source === 'ticktick')
+        .map((item) => [`${item.sourceCalendarId}:${item.sourceEventId}`, item])
+    )
 
     for (const { projectId, tasks } of projectTasks) {
       for (const task of tasks) {
         activeTaskIds.add(task.id)
         const reminder = taskToReminder(task, now)
         if (reminder.kind === 'timed' && new Date(reminder.startAt).getTime() > now.getTime() + IMPORT_WINDOW_MS) continue
-        const existing = this.repository
-          .list()
-          .find((item) => item.source === 'ticktick' && item.sourceEventId === task.id && item.sourceCalendarId === projectId)
+        const existing = existingById.get(`${projectId}:${task.id}`)
         this.repository.upsertImported(reminder)
         // The upsert never touches status/enabled, so a task completed in TickTick
         // but still present in the response must be completed locally (the pruning

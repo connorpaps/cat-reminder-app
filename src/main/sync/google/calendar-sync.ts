@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { google } from 'googleapis'
 import type { CalendarEvent, CalendarInfo, SyncResult } from '../../../shared/types/calendar'
 import type { Reminder } from '../../../shared/types/reminder'
@@ -36,20 +35,14 @@ export class GoogleCalendarSyncService {
     const events = await this.client.listUpcomingEvents(calendarIds, now.toISOString(), new Date(now.getTime() + 60 * 86_400_000).toISOString())
     let imported = 0
     let updated = 0
+    const existingById = new Map(this.repository.list().map((item) => [`${item.sourceCalendarId}:${item.sourceEventId}`, item]))
     for (const event of events) {
-      const existing = this.repository.list().find((item) => item.sourceEventId === event.id && item.sourceCalendarId === event.calendarId)
+      const existing = existingById.get(`${event.calendarId}:${event.id}`)
       this.repository.upsertImported(calendarEventToReminder(event, now))
       if (existing) updated += 1
       else imported += 1
     }
     return { imported, updated, skipped: 0, syncedAt: now.toISOString() }
-  }
-}
-
-export function createUnconfiguredCalendarClient(): GoogleCalendarClient {
-  return {
-    async listCalendars() { return [] },
-    async listUpcomingEvents() { return [] }
   }
 }
 
@@ -87,8 +80,4 @@ export function createGoogleCalendarClient(config: {
       return events
     }
   }
-}
-
-export function makeCalendarReminderId(calendarId: string, eventId: string): string {
-  return `google:${calendarId}:${eventId || randomUUID()}`
 }

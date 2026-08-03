@@ -30,7 +30,6 @@ const api: CatReminderApi = {
     disconnect: () => ipcRenderer.invoke('ticktick:disconnect')
   },
   app: {
-    openSettings: () => ipcRenderer.invoke('app:open-settings'),
     showTestOverlay: () => ipcRenderer.invoke('app:test-overlay'),
     quit: () => ipcRenderer.invoke('app:quit')
   }

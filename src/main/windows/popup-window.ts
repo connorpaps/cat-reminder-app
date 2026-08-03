@@ -45,6 +45,9 @@ export function showPopupWindow(): void {
   })
 
   popup.setAlwaysOnTop(true, 'pop-up-menu')
+  // Hardening: this window never opens child windows and never navigates away.
+  popup.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  popup.webContents.on('will-navigate', (event) => event.preventDefault())
   popup.on('blur', () => popup?.hide())
   popup.on('closed', () => { popup = undefined })
 
@@ -54,6 +57,3 @@ export function showPopupWindow(): void {
   })
 }
 
-export function hidePopupWindow(): void {
-  if (popup && !popup.isDestroyed()) popup.hide()
-}

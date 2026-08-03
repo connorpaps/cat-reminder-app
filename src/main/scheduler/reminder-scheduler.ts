@@ -51,7 +51,6 @@ export class ReminderScheduler {
     this.deferred = false
     this.emitNext()
   }
-  pendingCount(): number { return this.queue.size() }
   /** True when no reminder is queued or actively showing, so the task roll-up can safely take the overlay. */
   isIdle(): boolean { return this.queue.size() === 0 && !this.queue.isActive() }
 

@@ -33,9 +33,13 @@ if ([CatReminderFullscreenProbe]::IsFullscreen()) { '1' } else { '0' }
 let cachedAt = 0
 let cachedValue = false
 
+// Electron has no API to inspect OTHER apps' windows (GetForegroundWindow etc.),
+// so the PowerShell Win32 probe is the only dependency-free way to detect that
+// a non-Electron app is fullscreen. The result is cached to avoid spawning a
+// PowerShell process on every overlay check.
 async function detectFullscreen(): Promise<boolean | null> {
   if (process.platform !== 'win32') return false
-  if (Date.now() - cachedAt < 1000) return cachedValue
+  if (Date.now() - cachedAt < 3000) return cachedValue
   try {
     const result = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', probeScript], { timeout: 750, windowsHide: true, maxBuffer: 16 * 1024 })
     cachedValue = result.stdout.trim().endsWith('1')

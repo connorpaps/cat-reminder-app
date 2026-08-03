@@ -28,9 +28,52 @@ Approved plan: direct official TickTick Open API (NOT the Google Calendar bridge
 - **Bug caught in review**: upsert didn't sync `kind` → removing a due date in TickTick would leave a permanently-overdue `timed` reminder (sentinel startAt). Fixed by adding `kind=excluded.kind` to the upsert (also fixes the same latent bug for Google Tasks) + explicit local completion for status-2 tasks.
 - **Tests**: `tests/shared/ticktick-sync.test.ts` (7 tests: timed/anytime/all-day×2/completed/priorities/description). 43/43 pass, `tsc --noEmit` clean, review approved (kind-drift bug fixed), app restarted 21:39 with changes live.
 
-**Pending live test**: real OAuth connect + sync — **BLOCKED**, see §23 below.
+**Pending live test**: ~~BLOCKED~~ → **RESOLVED in §24**.
 
-### 23. TickTick OAuth debugging saga — BLOCKED (handing off to a fresh agent)
+### 24. TickTick OAuth UNBLOCKED + live-verified end-to-end (August 2, 2026, 22:41)
+
+**Root cause of the whole saga — a field-name mixup in the TickTick developer console.** The console's app edit form has TWO separate URL fields: **"OAuth redirect URL"** (used by the OAuth flow) and **"App Service URL"** (NOT used for OAuth). Previous sessions filled only App Service URL → TickTick's OAuth server saw zero registered redirect URIs → `error="invalid_request", "At least one redirect_uri must be registered with the client."` (and the pathless-port `unknown_exception`s were red herrings from the same misconfiguration).
+
+Fix (user action): on app **"cat-reminder-2"** (Client ID `Vds69F85a3DdvC4fGI` — matches `.env`), fill **"OAuth redirect URL"** with `http://127.0.0.1:14565/callback` and Save. App-side code needed no changes.
+
+Live verification, all green:
+- Standalone harness (`scripts/ticktick-live-test.mjs` — mirrors `oauth.ts` + `ticktick-sync.ts` exactly, no Electron needed): authorize → code → token (`expires_in` 15,551,999s ≈ 180 days) → `GET /project` (4 projects) → `GET /project/{id}/data` (tasks).
+- Real app via popup "Connect TickTick": callback received → token exchange succeeded → projects fetched (4) → `ticktick.tokens` created → **24 reminders imported** (anytime + all-day mapping correct, sentinel start for no-due tasks) → 4 projects persisted in `sync_metadata`.
+- Diagnostics still healthy: authorize 302 → `/signin`; fake-code exchange → `invalid_grant` 400.
+
+Small fix made: `runTickTickSync()` now persists `lastSuccessAt` to `sync_metadata` (provider `ticktick`) after each successful sync so "Synced Xm ago" survives restarts (previously only the in-memory value was updated).
+
+Known gotchas recorded:
+- **The token exchange returns NO `refresh_token`** (only `access_token` + `expires_in` ≈ 180 days). The app's proactive-refresh + 401-retry paths require `refreshToken` and therefore never fire; when the token finally expires the user reconnects. Accepted for v1. (`refresh_token` grant probes with fake tokens also return `invalid_client` on every auth variant — TickTick may not support refresh grants at all.)
+- The Google account on this machine still throws "Request had insufficient authentication scopes" (old consent predates the tasks scope) — reconnect Google to fix; unrelated to TickTick.
+
+### 25. Full codebase audit + cleanup (August 2, 2026) — validated: typecheck ✅, 42/42 tests ✅, build ✅
+
+Health/security audit of the whole app; fixed everything found and removed dead code.
+
+**Security hardening**
+- Production renderer builds now get a strict CSP via `electron.vite.config.ts` (transformIndexHtml, `apply: 'build'` — dev untouched so react-refresh works): `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; object-src 'none'; base-uri 'none'; form-action 'none'`. `img-src file:` is required for packaged overlay sprites loaded from `process.resourcesPath`. Verified in the built HTML; browser console shows zero CSP violations.
+- Popup + overlay windows now `setWindowOpenHandler(deny)` and `preventDefault()` on `will-navigate` (no in-app windows ever open or navigate; OAuth still uses the system browser).
+- `google/oauth.ts` now closes the callback server + clears the timeout + rejects on state-mismatch/no-code paths (previously the promise hung and the port lingered until the 5-min timeout; ticktick already had this fix).
+- Already good (re-verified): sandbox+contextIsolation+no-nodeIntegration preloads, all IPC inputs validated, no XSS sinks, safeStorage token files with 0600 perms.
+
+**Bug fixes**
+- `PopupApp` Google disconnect no longer force-disables `syncEnabled` — it clobbered main's invariant (auto-sync must stay on while TickTick is still connected).
+- `preferences-repository.get()` now guards `JSON.parse` per key (a corrupt value falls back to the default instead of crashing boot).
+
+**Cleanup (dead code / files / deps)**
+- Deleted: `src/main/sync/google/refresh.ts` (whole file unused), `src/preload/overlay.d.ts` (duplicate of the `shared/ipc.ts` global), `reference_reminder_app.png`, root `assets/` (Idle/Running/textbox duplicates of `public/assets`), `temp-ticktick-ss.png`.
+- Removed unused exports: `createUnconfiguredCalendarClient`, `makeCalendarReminderId`, `traversalProgress`, `traversalPositionPercent` (+ their tests), `DisplayBounds`, `hidePopupWindow`, `pendingCount`, `activeId`, and the vestigial `app:open-settings` IPC (handler + preload + type).
+- Removed unused dependencies: `zustand` (never imported) and `playwright` (skills use their own tooling); `pnpm install` pruned the lockfile without touching better-sqlite3's Electron ABI build.
+- Fixed formatting in `reminder-repository.ts` (toValues/insert indentation).
+
+**Performance**
+- The three sync services (google calendar / google tasks / ticktick) hoisted their per-item `repository.list()` lookup into a single `Map` (O(n²) → O(n)); tasks-sync and ticktick-sync Maps are scoped to their source (review nit).
+- `fullscreen-policy` probe cache 1s → 3s + comment explaining why the PowerShell Win32 probe is kept (Electron has no API to inspect other apps' windows).
+
+**Docs** — README rewritten to match the working app (TickTick + daily roll-up + correct console field name + current commands).
+
+### 23. TickTick OAuth debugging saga — RESOLVED (see §24)
 
 Goal: connect a TickTick developer app through the popup (authorize → token → projects → tasks). All app-side code is complete, reviewed, typechecked, and tested; the blocker is TickTick's OAuth authorize step, not our code.
 

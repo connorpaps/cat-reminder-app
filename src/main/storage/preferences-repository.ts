@@ -6,7 +6,12 @@ export class PreferencesRepository {
 
   get(): Preferences {
     const rows = this.db.prepare('SELECT key, value FROM preferences').all() as { key: string; value: string }[]
-    const stored = Object.fromEntries(rows.map(({ key, value }) => [key, JSON.parse(value)]))
+    // A corrupt stored value must not crash boot; fall back to the default.
+    const stored = Object.fromEntries(
+      rows
+        .map(({ key, value }) => { try { return [key, JSON.parse(value)] as const } catch { return null } })
+        .filter((entry): entry is readonly [string, unknown] => entry !== null)
+    )
     return { ...DEFAULT_PREFERENCES, ...stored }
   }
 

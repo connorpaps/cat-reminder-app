@@ -22,11 +22,3 @@ export type OverlayReminder = {
 }
 
 export type OverlayAction = 'snooze' | 'dismiss' | 'complete' | 'open'
-
-export type DisplayBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-  scaleFactor: number
-}
