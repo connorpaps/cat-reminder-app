@@ -35,6 +35,8 @@ export type TickTickApi = {
 
 export type AppApi = {
   showTestOverlay: () => Promise<void>
+  /** Base URL for packaged assets (undefined in dev where Vite serves public/). */
+  assetBaseUrl: () => Promise<string | undefined>
   quit: () => Promise<void>
 }
 

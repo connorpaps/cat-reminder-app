@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAT_PAUSE_DURATION_MS, CAT_PAUSE_POSITION_PERCENT, CAT_TRAVEL_DURATION_MS, CAT_TRAVEL_END_PERCENT, CAT_TRAVEL_START_PERCENT, DEFAULT_CAT_ANIMATIONS, exitDurationMs, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, walkDurationMs } from '../../src/shared/animation'
+import { CAT_IDS, CAT_PAUSE_DURATION_MS, CAT_PAUSE_POSITION_PERCENT, CAT_TRAVEL_DURATION_MS, CAT_TRAVEL_END_PERCENT, CAT_TRAVEL_START_PERCENT, CATS, DEFAULT_CAT_ANIMATIONS, catAnimationsFor, exitDurationMs, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, walkDurationMs } from '../../src/shared/animation'
 
 describe('cat animation metadata', () => {
   it('describes six 64px frames for the supplied running sheet', () => {
@@ -16,6 +16,23 @@ describe('cat animation metadata', () => {
     expect(DEFAULT_CAT_ANIMATIONS.running.feetPaddingPx).toBe(5)
     // Rendered drop = padding * integer scale (3x).
     expect(DEFAULT_CAT_ANIMATIONS.running.feetPaddingPx * DEFAULT_CAT_ANIMATIONS.running.scale).toBe(15)
+  })
+
+  it('registers every cat with idle + running strips following the same conventions', () => {
+    expect(CAT_IDS).toHaveLength(6)
+    expect(CAT_IDS).toContain('default')
+    for (const id of CAT_IDS) {
+      expect(CATS[id].animations.idle.frameCount).toBe(6)
+      expect(CATS[id].animations.running.frameCount).toBe(6)
+      expect(CATS[id].animations.idle.src).toBe(`assets/cats/${id}/idle.png`)
+      expect(CATS[id].animations.running.src).toBe(`assets/cats/${id}/running.png`)
+      // idle sits flush at the frame bottom; running has 5px of feet padding.
+      expect(CATS[id].animations.idle.feetPaddingPx).toBe(0)
+      expect(CATS[id].animations.running.feetPaddingPx).toBe(5)
+    }
+    // Unknown or missing ids fall back to the default cat.
+    expect(catAnimationsFor('nope')).toBe(CATS.default.animations)
+    expect(catAnimationsFor(undefined)).toBe(CATS.default.animations)
   })
 
   it('slows the traversal by 10% (12_375ms → 13_613ms)', () => {

@@ -2,6 +2,8 @@ export type AnimationIntensity = 'low' | 'medium' | 'high'
 export type FullscreenPolicy = 'respect' | 'show' | 'suppress'
 
 export type Preferences = {
+  /** Which cat the overlay walks (id from the CATS registry in shared/animation). */
+  selectedCatId: string
   onboardingCompleted: boolean
   launchAtLogin: boolean
   openInTray: boolean
@@ -20,10 +22,12 @@ export type Preferences = {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  selectedCatId: 'default',
   onboardingCompleted: false,
   launchAtLogin: false,
   openInTray: true,
-  soundEnabled: false,
+  // On by default so the chime is actually heard; the popup Sound toggle can disable it.
+  soundEnabled: true,
   bubbleEnabled: true,
   animationIntensity: 'medium',
   reminderLeadTimeMinutes: 5,

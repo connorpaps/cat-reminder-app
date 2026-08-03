@@ -31,6 +31,7 @@ const api: CatReminderApi = {
   },
   app: {
     showTestOverlay: () => ipcRenderer.invoke('app:test-overlay'),
+    assetBaseUrl: () => ipcRenderer.invoke('app:asset-base-url'),
     quit: () => ipcRenderer.invoke('app:quit')
   }
 }

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { CAT_IDS, CATS } from '../../shared/animation'
+import { assetUrl } from '../../shared/assets'
 import type { SyncStatus, TickTickSyncStatus } from '../../shared/types/sync'
 import type { Preferences } from '../../shared/types/preferences'
 
@@ -20,16 +22,19 @@ export function PopupApp() {
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [tickticking, setTickticking] = useState(false)
+  const [assetBase, setAssetBase] = useState<string | undefined>(undefined)
 
   const refresh = async () => {
-    const [nextPreferences, nextSync, nextTicktick] = await Promise.all([
+    const [nextPreferences, nextSync, nextTicktick, baseUrl] = await Promise.all([
       window.catReminder.preferences.get(),
       window.catReminder.sync.status(),
-      window.catReminder.ticktick.status()
+      window.catReminder.ticktick.status(),
+      window.catReminder.app.assetBaseUrl()
     ])
     setPreferences(nextPreferences)
     setSync(nextSync)
     setTicktick(nextTicktick)
+    setAssetBase(baseUrl)
   }
 
   useEffect(() => {
@@ -229,6 +234,32 @@ export function PopupApp() {
 
         <hr className="popup-divider" />
 
+        {/* Cat picker */}
+        {preferences && (
+          <div className="popup-section">
+            <span className="popup-label">🐈 Cat</span>
+            <div className="cat-picker" role="radiogroup" aria-label="Choose your cat">
+              {CAT_IDS.map((catId) => {
+                const selected = preferences.selectedCatId === catId
+                return (
+                  <button
+                    key={catId}
+                    type="button"
+                    className={`cat-picker-btn${selected ? ' selected' : ''}`}
+                    aria-pressed={selected}
+                    title={CATS[catId].displayName}
+                    onClick={() => void updatePreference('selectedCatId', catId)}
+                  >
+                    <img src={assetUrl(`assets/cats/${catId}/idle.png`, assetBase)} alt={CATS[catId].displayName} draggable={false} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <hr className="popup-divider" />
+
         {/* Settings */}
         {preferences && (
           <div className="popup-section">
@@ -266,6 +297,30 @@ export function PopupApp() {
                   type="checkbox"
                   checked={preferences.dailyTaskReminderEnabled}
                   onChange={(e) => void updatePreference('dailyTaskReminderEnabled', e.target.checked)}
+                />
+              </label>
+              <label className="popup-setting">
+                <span>Launch at login:</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.launchAtLogin}
+                  onChange={(e) => void updatePreference('launchAtLogin', e.target.checked)}
+                />
+              </label>
+              <label className="popup-setting">
+                <span>Start in tray:</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.openInTray}
+                  onChange={(e) => void updatePreference('openInTray', e.target.checked)}
+                />
+              </label>
+              <label className="popup-setting">
+                <span>Sound:</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.soundEnabled}
+                  onChange={(e) => void updatePreference('soundEnabled', e.target.checked)}
                 />
               </label>
             </div>

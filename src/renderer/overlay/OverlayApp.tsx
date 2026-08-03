@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { OverlayReminder, OverlayTaskItem } from '../../shared/types/overlay'
-import { DEFAULT_CAT_ANIMATIONS, TEXTBOX_LARGE_SPRITE, TEXTBOX_SPRITE, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, type TextboxSpriteManifest } from '../../shared/animation'
+import { TEXTBOX_LARGE_SPRITE, TEXTBOX_SPRITE, catAnimationsFor, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, type TextboxSpriteManifest } from '../../shared/animation'
+import { assetUrl } from '../../shared/assets'
 
 const intensityFps = { low: 6, medium: 10, high: 14 } as const
 const CAT_HEIGHT = 192
@@ -16,11 +17,6 @@ type TextboxProps = {
   sprite: TextboxSpriteManifest
   assetBaseUrl?: string
   onAction: (action: 'snooze' | 'dismiss' | 'complete') => void
-}
-
-function assetUrl(path: string, baseUrl?: string): string {
-  if (baseUrl) return `${baseUrl.replace(/\/$/, '')}/${path}`
-  return `${window.location.protocol === 'file:' ? './' : '/'}${path}`
 }
 
 function Textbox({ reminder, taskItems, rollup, sprite, assetBaseUrl, onAction }: TextboxProps) {
@@ -98,6 +94,15 @@ export function OverlayApp() {
     }
   }, [overlayWindow.catOverlay])
 
+  // Play the chime on show when sound is enabled (autoplay is allowed via the
+  // main process autoplay-policy switch).
+  useEffect(() => {
+    if (!payload?.soundEnabled) return
+    const audio = new Audio(assetUrl('assets/sounds/chime.wav', payload.assetBaseUrl))
+    audio.volume = 0.5
+    void audio.play().catch(() => { /* audio unavailable (silent machine) — ignore */ })
+  }, [payload])
+
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
     const update = () => setReducedMotion(media.matches)
@@ -134,7 +139,8 @@ export function OverlayApp() {
   const bubbleWidth = bubbleSprite.panelWidth * bubbleSprite.scale
   const bubbleHeight = bubbleSprite.panelHeight * bubbleSprite.scale
   // Idle in place at the end of the walk so the cat rests before walking off.
-  const animation = phase === 'pausing' ? DEFAULT_CAT_ANIMATIONS.idle : DEFAULT_CAT_ANIMATIONS.running
+  const catAnimations = catAnimationsFor(payload?.catId)
+  const animation = phase === 'pausing' ? catAnimations.idle : catAnimations.running
   const fps = phase === 'pausing' ? animation.fps : intensityFps[intensity]
   const frame = Math.floor((Math.max(0, elapsed) / 1000) * fps)
   const spriteStyle = useMemo(() => ({
@@ -152,7 +158,7 @@ export function OverlayApp() {
     // it around its own center. Reversing the order shifts the sprite a full sprite-width
     // off-center (the translate is applied inside the flipped coordinate space).
     transform: phase === 'pausing' ? 'translateX(-50%) scaleX(-1)' : 'translateX(-50%)'
-  }), [animation, frame, payload?.assetBaseUrl, phase])
+  }), [animation, frame, payload?.assetBaseUrl, payload?.catId, phase])
 
   const dismissCurrent = useCallback(() => {
     if (!payload) return

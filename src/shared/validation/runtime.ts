@@ -1,3 +1,4 @@
+import { CAT_IDS } from '../animation'
 import type { CreateReminderInput, ReminderKind, ReminderPriority, UpdateReminderInput } from '../types/reminder'
 import type { Preferences } from '../types/preferences'
 
@@ -17,7 +18,7 @@ function isValidTimeZone(value: unknown): value is string {
 }
 
 const preferenceKeys = new Set<keyof Preferences>([
-  'onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled',
+  'selectedCatId', 'onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled',
   'animationIntensity', 'reminderLeadTimeMinutes', 'snoozeMinutes', 'syncEnabled', 'syncIntervalMinutes', 'fullscreenPolicy',
   'dailyTaskReminderEnabled', 'dailyTaskReminderTime'
 ])
@@ -79,6 +80,7 @@ export function isPreferencesPatch(value: unknown): value is Partial<Preferences
     if (key === 'fullscreenPolicy' && !['respect', 'show', 'suppress'].includes(entry as string)) return false
     if (['onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled', 'syncEnabled', 'dailyTaskReminderEnabled'].includes(key) && typeof entry !== 'boolean') return false
     if (key === 'dailyTaskReminderTime' && (typeof entry !== 'string' || !timePattern.test(entry))) return false
+    if (key === 'selectedCatId' && (typeof entry !== 'string' || !(CAT_IDS as string[]).includes(entry))) return false
   }
   return true
 }

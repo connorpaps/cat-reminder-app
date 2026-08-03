@@ -47,6 +47,16 @@ Known gotchas recorded:
 - **The token exchange returns NO `refresh_token`** (only `access_token` + `expires_in` ≈ 180 days). The app's proactive-refresh + 401-retry paths require `refreshToken` and therefore never fire; when the token finally expires the user reconnects. Accepted for v1. (`refresh_token` grant probes with fake tokens also return `invalid_client` on every auth variant — TickTick may not support refresh grants at all.)
 - The Google account on this machine still throws "Request had insufficient authentication scopes" (old consent predates the tasks scope) — reconnect Google to fix; unrelated to TickTick.
 
+### 26. Extra cats + picker, settings polish, sound (August 2, 2026) — validated: typecheck ✅, 43/43 tests ✅, build ✅
+
+**⚠️ USER REPORTED ISSUES with the new cat features — to fix next session.** The user said "there are issue but ill fix next session" — details were not captured. Before considering these features done, manually test: cat picker thumbnails, switching cats, overlay walking the selected cat, tray icon updating, chime playback.
+
+- **5 new cats** from `public/assets/cats/default/AllCats{Black,Grey,GreyWhite,Orange,White}.png` atlases (1024×1216). Each atlas: idle strip on row 1 (y 0..63) and running strip on row 6 (y 320..383), 6 frames × 64×64. Extracted via `scripts/extract-cats.mjs` into per-cat folders (`black`, `grey`, `grey-white`, `orange`, `white`) with manifests. **The black atlas is horizontally mirrored vs the others** (idle faces right / running faces left) — the extractor flips it (`flipX: true`) so ALL cats follow the app convention: idle faces left, running faces right (same feetPadding 0/5 as default). Verified by pixel-diff against the default strips.
+- New sprite tooling (dependency-free): `scripts/png-lib.mjs` (decode/encode), `scripts/png-sheet-info.mjs` (analyzer), `scripts/extract-cats.mjs` (extractor; writes preview to the OS temp dir, never into public/), `scripts/gen-sound.mjs` (chime WAV generator).
+- **Cat registry** (`src/shared/animation.ts`): `CATS`/`CAT_IDS`/`catAnimationsFor()`; new `selectedCatId` preference (validated against `CAT_IDS` in runtime.ts, default `'default'`). Overlay + tray + daily roll-up all follow it; tray icon updates live via `updateTrayIcon()` on preference change (path sanitized against CAT_IDS).
+- **Sound**: `public/assets/sounds/chime.wav` (soft two-tone bell, 0.95s); plays in the overlay when `soundEnabled` (payload field) — ON by default now; popup has a Sound checkbox. Main sets `autoplay-policy=no-user-gesture-required`; CSP gained `media-src 'self' file:`.
+- **Popup**: 🐈 Cat picker (6 thumbnails; dev URLs from Vite public/, packaged via new `app:asset-base-url` IPC) + new Settings checkboxes: Launch at login, Start in tray, Sound. (`soundEnabled` was previously a dead preference — now wired.)
+
 ### 25. Full codebase audit + cleanup (August 2, 2026) — validated: typecheck ✅, 42/42 tests ✅, build ✅
 
 Health/security audit of the whole app; fixed everything found and removed dead code.

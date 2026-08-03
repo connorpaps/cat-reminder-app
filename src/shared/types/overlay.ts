@@ -19,6 +19,10 @@ export type OverlayReminder = {
   taskItems?: OverlayTaskItem[]
   /** Marks the daily task roll-up reminder: Snooze/Dismiss buttons, and walking off does not auto-dismiss it. */
   rollup?: boolean
+  /** Which cat walks (id from the CATS registry in shared/animation); defaults to the default cat. */
+  catId?: string
+  /** Whether to play the chime when the show starts. */
+  soundEnabled?: boolean
 }
 
 export type OverlayAction = 'snooze' | 'dismiss' | 'complete' | 'open'

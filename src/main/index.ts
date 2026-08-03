@@ -12,7 +12,7 @@ import { ReminderRepository } from './storage/reminder-repository'
 import { PreferencesRepository } from './storage/preferences-repository'
 import { showPopupWindow } from './windows/popup-window'
 import { hideOverlay, markOverlayReady, resetOverlayAfterFailure, setOverlayIgnoreMouseEvents, showOverlay } from './windows/overlay-window'
-import { createTray } from './tray/tray'
+import { createTray, updateTrayIcon } from './tray/tray'
 import { ReminderScheduler } from './scheduler/reminder-scheduler'
 import { logger } from './logging/logger'
 import { complete, dismiss, snooze } from '../shared/reminders/state'
@@ -29,6 +29,9 @@ import type { SyncStatus, TickTickSyncStatus } from '../shared/types/sync'
 import type { TickTickProject, TickTickSyncResult } from '../shared/types/ticktick'
 import { isCreateReminderInput, isPreferencesPatch, isReminderAction, isReminderId, isUpdateReminderInput } from '../shared/validation/runtime'
 import type { CreateReminderInput } from '../shared/types/reminder'
+
+// Let the overlay play the reminder chime without requiring a prior user gesture.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 let reminderRepository: ReminderRepository
 let preferencesRepository: PreferencesRepository
@@ -58,6 +61,12 @@ const previewReminderIds = new Set<string>()
 function overlayAssetBaseUrl(): string | undefined {
   if (!app.isPackaged || process.env.ELECTRON_RENDERER_URL) return undefined
   return pathToFileURL(join(process.resourcesPath)).href
+}
+
+/** The selected cat + sound preference ride along on every overlay payload. */
+function overlayPrefs(): { catId: string; soundEnabled: boolean } {
+  const preferences = preferencesRepository.get()
+  return { catId: preferences.selectedCatId, soundEnabled: preferences.soundEnabled }
 }
 
 function applyRecurringAdvance(reminder: import('../shared/types/reminder').Reminder): void {
@@ -393,17 +402,21 @@ function registerIpc(): void {
   })
   ipcMain.handle('preferences:update', (_event, input: unknown) => {
     if (!isPreferencesPatch(input)) throw new Error('Invalid preferences update.')
+    const previous = preferencesRepository.get()
     const next = preferencesRepository.update(input)
+    // Follow the selected cat in the tray icon immediately.
+    if (next.selectedCatId !== previous.selectedCatId) updateTrayIcon(next.selectedCatId)
     app.setLoginItemSettings({ openAtLogin: app.isPackaged && next.launchAtLogin, openAsHidden: next.openInTray })
     return next
   })
+  ipcMain.handle('app:asset-base-url', () => overlayAssetBaseUrl())
   ipcMain.handle('app:test-overlay', async () => {
     const now = new Date()
     const reminder = reminderRepository.create({ title: 'A tiny cat reminder', description: 'This is a local overlay test.', startAt: new Date(now.getTime() + 5_000).toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, priority: 'normal' })
     previewReminderIds.add(reminder.id)
     reminderRepository.markTriggered(reminder.id, now)
     try {
-      await showOverlay({ reminder, preview: true, queuedAt: now.toISOString(), assetBaseUrl: overlayAssetBaseUrl(), animationIntensity: preferencesRepository.get().animationIntensity }, 'show')
+      await showOverlay({ reminder, preview: true, queuedAt: now.toISOString(), assetBaseUrl: overlayAssetBaseUrl(), animationIntensity: preferencesRepository.get().animationIntensity, ...overlayPrefs() }, 'show')
     } catch (error) {
       previewReminderIds.delete(reminder.id)
       reminderRepository.clearTriggered(reminder.id)
@@ -507,7 +520,7 @@ async function boot(): Promise<void> {
       scheduler.completeActive()
       return
     }
-    void showOverlay({ reminder, queuedAt: new Date().toISOString(), assetBaseUrl: overlayAssetBaseUrl(), animationIntensity: preferences.animationIntensity }, preferences.fullscreenPolicy)
+    void showOverlay({ reminder, queuedAt: new Date().toISOString(), assetBaseUrl: overlayAssetBaseUrl(), animationIntensity: preferences.animationIntensity, ...overlayPrefs() }, preferences.fullscreenPolicy)
       .then((shown) => {
         if (!shown) {
           logger.info('Overlay deferred by fullscreen policy', { id: reminder.id })
@@ -525,7 +538,7 @@ async function boot(): Promise<void> {
       })
   })
   registerIpc()
-  createTray()
+  createTray(preferencesRepository.get().selectedCatId)
   reconcileRecurringReminders()
   scheduler.start()
 
@@ -540,7 +553,7 @@ async function boot(): Promise<void> {
     isQueueIdle: () => scheduler.isIdle(),
     assetBaseUrl: overlayAssetBaseUrl,
     show: async (payload, policy) => {
-      const shown = await showOverlay(payload, policy)
+      const shown = await showOverlay({ ...payload, ...overlayPrefs() }, policy)
       if (shown) rollupShowing = true
       return shown
     }

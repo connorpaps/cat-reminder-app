@@ -25,7 +25,7 @@ const cspMetaTag = {
           attrs: {
             'http-equiv': 'Content-Security-Policy',
             content:
-              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; object-src 'none'; base-uri 'none'; form-action 'none'"
+              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; media-src 'self' file:; object-src 'none'; base-uri 'none'; form-action 'none'"
           },
           injectTo: 'head-prepend'
         }

@@ -11,12 +11,47 @@ export type SpriteAnimationManifest = {
   feetPaddingPx: number
 }
 
-export const DEFAULT_CAT_ANIMATIONS: Record<string, SpriteAnimationManifest> = {
-  // idle is a sitting pose: base flush with the frame bottom (0px padding), drawn facing left.
-  idle: { id: 'default-idle', src: 'assets/cats/default/idle.png', frameWidth: 64, frameHeight: 64, frameCount: 6, fps: 8, scale: 3, imageRendering: 'pixelated', feetPaddingPx: 0 },
-  // running feet reach row 58 of 63 in the contact frames (5px of padding below them); drawn facing right.
-  running: { id: 'default-running', src: 'assets/cats/default/running.png', frameWidth: 64, frameHeight: 64, frameCount: 6, fps: 10, scale: 3, imageRendering: 'pixelated', feetPaddingPx: 5 }
+export type CatId = 'default' | 'black' | 'grey' | 'grey-white' | 'orange' | 'white'
+
+export type CatAnimations = { idle: SpriteAnimationManifest; running: SpriteAnimationManifest }
+
+export type CatDefinition = {
+  id: CatId
+  displayName: string
+  animations: CatAnimations
 }
+
+function catAnimations(catId: CatId): CatAnimations {
+  return {
+    // idle is a sitting pose: base flush with the frame bottom (0px padding), drawn facing left.
+    idle: { id: `cat-${catId}-idle`, src: `assets/cats/${catId}/idle.png`, frameWidth: 64, frameHeight: 64, frameCount: 6, fps: 8, scale: 3, imageRendering: 'pixelated', feetPaddingPx: 0 },
+    // running feet reach row 58 of 63 in the contact frames (5px of padding below them); drawn facing right.
+    running: { id: `cat-${catId}-running`, src: `assets/cats/${catId}/running.png`, frameWidth: 64, frameHeight: 64, frameCount: 6, fps: 10, scale: 3, imageRendering: 'pixelated', feetPaddingPx: 5 }
+  }
+}
+
+// All sheets follow the same convention (idle faces left, running faces right;
+// the black atlas is mirrored at extraction time — see scripts/extract-cats.mjs).
+export const CATS: Record<CatId, CatDefinition> = {
+  default: { id: 'default', displayName: 'Default Cat', animations: catAnimations('default') },
+  black: { id: 'black', displayName: 'Black Cat', animations: catAnimations('black') },
+  grey: { id: 'grey', displayName: 'Grey Cat', animations: catAnimations('grey') },
+  'grey-white': { id: 'grey-white', displayName: 'Grey & White Cat', animations: catAnimations('grey-white') },
+  orange: { id: 'orange', displayName: 'Orange Cat', animations: catAnimations('orange') },
+  white: { id: 'white', displayName: 'White Cat', animations: catAnimations('white') }
+}
+
+export const CAT_IDS = Object.keys(CATS) as CatId[]
+export const DEFAULT_CAT_ID: CatId = 'default'
+
+/** Resolves the selected cat's animation pair, falling back to the default cat for unknown ids. */
+export function catAnimationsFor(catId: string | undefined): CatAnimations {
+  const definition = catId ? CATS[catId as CatId] : undefined
+  return definition?.animations ?? CATS[DEFAULT_CAT_ID].animations
+}
+
+// Backwards-compatible alias used by tests.
+export const DEFAULT_CAT_ANIMATIONS: CatAnimations = CATS[DEFAULT_CAT_ID].animations
 
 // Full traversal time for the running sprite across the whole screen (-12% → 112%).
 // 12_375ms + 10% = 13_612.5ms, rounded to a whole millisecond.
