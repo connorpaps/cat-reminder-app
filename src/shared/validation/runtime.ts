@@ -1,9 +1,11 @@
-import type { CreateReminderInput, ReminderPriority, UpdateReminderInput } from '../types/reminder'
+import type { CreateReminderInput, ReminderKind, ReminderPriority, UpdateReminderInput } from '../types/reminder'
 import type { Preferences } from '../types/preferences'
 
 const priorities = new Set<ReminderPriority>(['low', 'normal', 'high', 'urgent'])
+const kinds = new Set<ReminderKind>(['timed', 'all-day', 'anytime'])
 const statuses = new Set(['upcoming', 'soon', 'due', 'overdue', 'snoozed', 'completed', 'dismissed'])
 const frequencies = new Set(['daily', 'weekly', 'monthly'])
+const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
 function isValidTimeZone(value: unknown): value is string {
   if (typeof value !== 'string' || value.length === 0) return false
   try {
@@ -16,7 +18,8 @@ function isValidTimeZone(value: unknown): value is string {
 
 const preferenceKeys = new Set<keyof Preferences>([
   'onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled',
-  'animationIntensity', 'reminderLeadTimeMinutes', 'snoozeMinutes', 'syncEnabled', 'syncIntervalMinutes', 'fullscreenPolicy'
+  'animationIntensity', 'reminderLeadTimeMinutes', 'snoozeMinutes', 'syncEnabled', 'syncIntervalMinutes', 'fullscreenPolicy',
+  'dailyTaskReminderEnabled', 'dailyTaskReminderTime'
 ])
 
 function validRepeatRule(value: unknown): boolean {
@@ -37,7 +40,12 @@ export function isCreateReminderInput(value: unknown): value is CreateReminderIn
   if (!value || typeof value !== 'object') return false
   const input = value as Record<string, unknown>
   if (typeof input.title !== 'string' || input.title.trim().length === 0 || input.title.length > 160) return false
-  if (typeof input.startAt !== 'string' || Number.isNaN(new Date(input.startAt).getTime())) return false
+  const kind = (input.kind ?? 'timed') as ReminderKind
+  if (!kinds.has(kind)) return false
+  if (input.startAt !== undefined && (typeof input.startAt !== 'string' || Number.isNaN(new Date(input.startAt).getTime()))) return false
+  // `timed`/`all-day` require a start time; `anytime` may omit it.
+  if (kind !== 'anytime' && (typeof input.startAt !== 'string' || Number.isNaN(new Date(input.startAt).getTime()))) return false
+  if (input.repeatRule !== undefined && kind !== 'timed') return false
   if (input.endAt !== undefined && (typeof input.endAt !== 'string' || Number.isNaN(new Date(input.endAt).getTime()))) return false
   if (input.description !== undefined && typeof input.description !== 'string') return false
   if (input.enabled !== undefined && typeof input.enabled !== 'boolean') return false
@@ -49,6 +57,8 @@ export function isCreateReminderInput(value: unknown): value is CreateReminderIn
 export function isUpdateReminderInput(value: unknown): value is UpdateReminderInput {
   if (!value || typeof value !== 'object') return false
   const input = value as Record<string, unknown>
+  // A reminder's kind is fixed at creation; it can't be changed via updates.
+  if (input.kind !== undefined) return false
   if (input.title !== undefined && (typeof input.title !== 'string' || input.title.trim().length === 0 || input.title.length > 160)) return false
   if (input.description !== undefined && typeof input.description !== 'string') return false
   if (input.enabled !== undefined && typeof input.enabled !== 'boolean') return false
@@ -67,7 +77,8 @@ export function isPreferencesPatch(value: unknown): value is Partial<Preferences
     if (key.endsWith('Minutes') && (typeof entry !== 'number' || !Number.isFinite(entry) || entry < 1 || entry > 24 * 60)) return false
     if (key === 'animationIntensity' && !['low', 'medium', 'high'].includes(entry as string)) return false
     if (key === 'fullscreenPolicy' && !['respect', 'show', 'suppress'].includes(entry as string)) return false
-    if (['onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled', 'syncEnabled'].includes(key) && typeof entry !== 'boolean') return false
+    if (['onboardingCompleted', 'launchAtLogin', 'openInTray', 'soundEnabled', 'bubbleEnabled', 'syncEnabled', 'dailyTaskReminderEnabled'].includes(key) && typeof entry !== 'boolean') return false
+    if (key === 'dailyTaskReminderTime' && (typeof entry !== 'string' || !timePattern.test(entry))) return false
   }
   return true
 }

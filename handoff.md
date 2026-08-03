@@ -13,7 +13,59 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 **Single-instance lock is active.** Running `pnpm dev` twice or double-clicking the executable will focus the existing instance instead of spawning a duplicate tray icon.
 
+## Work completed this session (August 2, 2026) — daily task roll-up
+
+### 21. Daily task roll-up: time-less reminders shown as one cat overlay at a configurable daily time
+
+Approved plan implemented (unified Reminder kind model; NO task-list UI in the app — the checklist lives in TickTick/elsewhere; the cat just presents the day's tasks).
+
+- **Data model** (`src/shared/types/reminder.ts`): `Reminder.kind` = `'timed' | 'all-day' | 'anytime'`; `ANYTIME_SENTINEL_START` placeholder keeps `start_at` NOT NULL. Migration v4 (`src/main/storage/database.ts`) adds `kind TEXT NOT NULL DEFAULT 'timed'` + `daily_task_reminder_state` table. `'ticktick'` not yet added to `ReminderSource` (reserved for the future integration).
+- **Scheduler** (`src/main/scheduler/task-rollup.ts` + `src/main/storage/task-rollup-repository.ts`): pure `rollupDecision(now, time, state, hasTasks)` (pending/shown/snoozed/dismissed), `dayKey()`, `buildRollupOverlay()`; `TaskRollupScheduler` checks every 30s + once at boot (late launches still show the day's list). `dueCandidates` is now timed-only; `statusAt` rejects non-timed kinds; `ReminderScheduler.isIdle()` added. `todayTasks()` = uncompleted anytime + all-day items due on the local calendar day.
+- **Sync** (`src/main/sync/google/tasks-sync.ts`): due-less Google Tasks now import as `anytime` (previously silently dropped); `00:00:00 UTC` due → `all-day` at local midnight; others `timed`. `calendar-sync.ts` stamps `kind: 'timed'`.
+- **Overlay** (`src/renderer/overlay/OverlayApp.tsx`, `src/shared/animation.ts`, `src/renderer/styles.css`): `TEXTBOX_LARGE_SPRITE` (62×46 source panel at scale 4) renders the task list bubble (title + up to 6 rows + "+N more" + Snooze/Dismiss). Rollup walks off WITHOUT auto-dismissing (stays 'shown' for the day); timed reminders still auto-dismiss at walk end. `TextboxSpriteManifest` shared type for both textbox sprites.
+- **Main wiring** (`src/main/index.ts`): rollup timer, rollup action routing (snooze→`markSnoozed`, dismiss→`markDismissed`), `rollupShowing` guard defers timed reminders while the rollup owns the overlay (30s retry) so the two never fight.
+- **Popup** (`src/renderer/popup/PopupApp.tsx`): "Daily task reminder" enable toggle + time input (default 09:00) under settings.
+- **Validation** (`src/shared/validation/reminder.ts`, `runtime.ts`): kind-aware create rules (`anytime` may omit startAt; repeatRule rejected for non-timed), new preference keys guarded (`dailyTaskReminderTime` regex `HH:mm`).
+- **Tests**: `tests/shared/task-rollup.test.ts` (dayKey, decision matrix, malformed time) + `tests/shared/tasks-sync.test.ts` (kind mapping: due-less→anytime, midnight→all-day, timed) + validation/runtime updates + fixtures. 36/36 pass, `tsc --noEmit` clean, review approved.
+
+Known intentional gap: all-day *recurrence* (repeatRule on non-timed kinds) is rejected by validation — recurring tasks will come from the future TickTick integration; anytime tasks already re-appear every day until completed.
+
 ## Work completed this session (August 2, 2026) — GitHub setup
+
+### 20. Fixed broken idle mirror (sprite displaced one full width during the pause)
+
+- The idle flip used `scaleX(-1) translateX(-50%)`, which mirrors around the wrong pivot — per the CSS transform spec the list is sandwiched between `translate(-origin)`/`translate(origin)`, so the translateX percentage ends up applied in the flipped coordinate space and the sprite shifts exactly one sprite-width (192px) right of the bubble.
+- `src/renderer/overlay/OverlayApp.tsx` — order corrected to `translateX(-50%) scaleX(-1)` (center first, then mirror around the center), with a comment documenting why the order matters. Direction re-verified via pixel color analysis (idle's white-tipped tail is on the right → faces left; running's is on the left with the head right → faces right).
+
+Validation: `tsc --noEmit` passes, `vitest run` 24/24 pass, code review confirmed the matrix math, dev app restarted with the fix live.
+
+### 19. Cat feet now touch the taskbar; idle faces the direction of travel
+
+- Measured the actual sprite pixels with a Node PNG decoder: `running.png` has 5–7px of transparent padding below the feet (feet end at row 58 of 63 in contact frames), `idle.png` is a sitting pose flush at row 63 and drawn facing left (tail on the right).
+- `src/shared/animation.ts` — `SpriteAnimationManifest` gains `feetPaddingPx` (idle: 0, running: 5).
+- `src/renderer/overlay/OverlayApp.tsx` — sprite inline `bottom: -(feetPaddingPx * scale)` (running −15px) so the cat's feet, not the frame's padding, rest on the taskbar walk line; inline `transform: 'scaleX(-1) translateX(-50%)'` during the idle pause mirrors the left-facing idle sprite toward travel direction. No visual jump at phase boundaries (both poses touch the same line).
+- `tests/shared/animation.test.ts` — new test documents the measured padding values; `public/assets/cats/default/manifest.json` updated with `feetPaddingPx` + `facing` metadata.
+
+Validation: `tsc --noEmit` passes, `vitest run` 24/24 pass, code review approved, dev app restarted with changes live.
+
+### 18. Overlay show is now walk → 5s idle pause → exit; traversal slowed 10%
+
+- `src/shared/animation.ts` — `CAT_TRAVEL_DURATION_MS` 12_375 → 13_613 (+10%). Added the phase model: `CAT_PAUSE_DURATION_MS = 5_000`, `CAT_PAUSE_POSITION_PERCENT = 90`, plus `walkDurationMs()`, `exitDurationMs()`, `totalShowDurationMs()`, `phaseAt()`, `traversalPositionAt()` (walk -12%→90%, hold 90% during the idle pause, then 90%→112% off screen). Walk+exit still sum to the full traversal time.
+- `src/renderer/overlay/OverlayApp.tsx` — renderer now drives the show from `phaseAt()`/`traversalPositionAt()`; swaps to `DEFAULT_CAT_ANIMATIONS.idle` (idle.png) during the pause; rAF loop and walk-end auto-dismiss keyed off `totalShowDurationMs()`.
+- `tests/shared/animation.test.ts` — 3 new tests for the 10% slowdown and the walk/pause/exit phase boundaries and positions.
+- Verified idle was already set up: `public/assets/cats/default/idle.png` (384×64, 6 frames), `manifest.json`, and `DEFAULT_CAT_ANIMATIONS.idle` all agree — no new art needed.
+
+Validation: `tsc --noEmit` passes, `vitest run` 23/23 pass, code review approved (minor nits only), dev app restarted with changes live.
+
+### 17. Overlay fixes: taskbar-aware walking + no lingering textbox
+
+Updated:
+
+- `src/main/windows/overlay-window.ts` — overlay window now spans the full display `bounds` instead of the work area; added `catWalkBaseline()` = `bounds.bottom - workArea.bottom` (the taskbar height for a bottom-docked taskbar, `0` otherwise). Baseline is sent to the renderer as `walkBaselineFromBottom` so the cat's feet rest exactly on the taskbar's top edge on any machine.
+- `src/shared/types/overlay.ts` — added optional `walkBaselineFromBottom` to `OverlayReminder`.
+- `src/renderer/overlay/OverlayApp.tsx` — removed the 60s auto-dismiss linger and the post-walk snap to `left: 86%`. The bubble now rides with the cat for the whole traversal and both exit off-screen at 112%; at walk end the reminder auto-dismisses (`dismiss` action) unless the user already clicked Dismiss/Done mid-walk (`interactedRef` guard).
+
+Validation: `tsc --noEmit` passes, `vitest run` 20/20 pass, code review approved. Dev app restarted with changes live.
 
 ### 16. Session wrap-up — final validation of the memory system
 
@@ -292,7 +344,7 @@ Important files and responsibilities:
 All of the following passed after every change:
 
 - `npx tsc --noEmit` — typecheck passes
-- `npx vitest run` — 7 test files, 20 tests, all passed
+- `npx vitest run` — 9 test files, 36 tests, all passed (incl. new `task-rollup.test.ts` + `tasks-sync.test.ts`)
 - Code reviews — all changes reviewed and approved
 
 ## How to run

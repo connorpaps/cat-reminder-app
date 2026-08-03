@@ -1,7 +1,10 @@
 import 'dotenv/config'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { addMinutes } from 'date-fns'
 import { app, ipcMain, powerMonitor, screen } from 'electron'
+import { DAILY_TASKS_ID_PREFIX, TaskRollupScheduler, isDailyTaskRollupId } from './scheduler/task-rollup'
+import { DailyTaskRollupRepository } from './storage/task-rollup-repository'
 import { nextOccurrence } from '../shared/reminders/recurrence'
 import { createDatabase } from './storage/database'
 import { SyncRepository } from './storage/sync-repository'
@@ -36,6 +39,13 @@ let taskListCache: GoogleTaskList[] = []
 let lastSyncAt: string | undefined
 let syncError: string | undefined
 let syncTimer: NodeJS.Timeout | undefined
+let rollupRepository: DailyTaskRollupRepository
+let taskRollupScheduler: TaskRollupScheduler
+let rollupTimer: NodeJS.Timeout | undefined
+// True while the daily task roll-up owns the overlay window (walking + idle pause
+// + exit). Timed reminders defer until it finishes so the two never fight over
+// the single overlay.
+let rollupShowing = false
 const previewReminderIds = new Set<string>()
 
 function overlayAssetBaseUrl(): string | undefined {
@@ -287,6 +297,13 @@ function registerIpc(): void {
     if (typeof ignore === 'boolean') setOverlayIgnoreMouseEvents(event.sender.id, ignore)
   })
   ipcMain.on('overlay:animation-complete', (event, id: unknown) => {
+    // The daily roll-up walked off without a click: hide it, but leave today's
+    // state as 'shown' so it doesn't auto-dismiss the day or immediately re-fire.
+    if (typeof id === 'string' && isDailyTaskRollupId(id)) {
+      rollupShowing = false
+      hideOverlay()
+      return
+    }
     const isPreview = typeof id === 'string' && previewReminderIds.delete(id)
     if (isPreview && typeof id === 'string') {
       reminderRepository.clearTriggered(id)
@@ -298,6 +315,19 @@ function registerIpc(): void {
   })
   ipcMain.on('overlay:action', (_event, id: unknown, action: unknown) => {
     if (!isReminderId(id) || !isReminderAction(action)) return
+    // Daily task roll-up: snooze reappears it after the configured snooze window;
+    // dismiss hides it for the rest of the day. Individual tasks are untouched.
+    if (typeof id === 'string' && isDailyTaskRollupId(id)) {
+      rollupShowing = false
+      const date = id.slice(DAILY_TASKS_ID_PREFIX.length)
+      if (action === 'snooze') {
+        rollupRepository.markSnoozed(date, addMinutes(new Date(), preferencesRepository.get().snoozeMinutes).toISOString())
+      } else {
+        rollupRepository.markDismissed(date)
+      }
+      hideOverlay()
+      return
+    }
     if (previewReminderIds.delete(id)) {
       reminderRepository.clearTriggered(id)
       reminderRepository.remove(id)
@@ -339,6 +369,13 @@ async function boot(): Promise<void> {
   scheduler = new ReminderScheduler(reminderRepository, () => preferencesRepository.get().reminderLeadTimeMinutes)
   scheduler.onTrigger((reminder) => {
     logger.info('Reminder trigger', { id: reminder.id, title: reminder.title })
+    // The daily task roll-up has the overlay; don't replace it mid-walk.
+    if (rollupShowing) {
+      logger.info('Daily task roll-up active; deferring timed reminder', { id: reminder.id, title: reminder.title })
+      scheduler.deferActive()
+      setTimeout(() => scheduler.retryDeferred(), 30_000)
+      return
+    }
     const preferences = preferencesRepository.get()
     if (preferences.fullscreenPolicy === 'suppress') {
       logger.info('Overlay suppressed by user policy', { id: reminder.id })
@@ -367,6 +404,26 @@ async function boot(): Promise<void> {
   reconcileRecurringReminders()
   scheduler.start()
 
+  // Daily task roll-up: at the configured time each day, show all time-less tasks
+  // for the day as one cat overlay. Checks every 30s and once at boot (so a late
+  // launch still shows today's list if it hasn't been shown or dismissed yet).
+  rollupRepository = new DailyTaskRollupRepository(db)
+  taskRollupScheduler = new TaskRollupScheduler({
+    repository: reminderRepository,
+    state: rollupRepository,
+    preferences: () => preferencesRepository.get(),
+    isQueueIdle: () => scheduler.isIdle(),
+    assetBaseUrl: overlayAssetBaseUrl,
+    show: async (payload, policy) => {
+      const shown = await showOverlay(payload, policy)
+      if (shown) rollupShowing = true
+      return shown
+    }
+  })
+  const checkRollup = () => taskRollupScheduler.check()
+  checkRollup()
+  rollupTimer = setInterval(checkRollup, 30_000)
+
   // Auto-sync timer: check every 60s if sync interval has elapsed
   syncTimer = setInterval(() => {
     const intervalMs = preferencesRepository.get().syncIntervalMinutes * 60_000
@@ -393,4 +450,9 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(boot).catch((error) => logger.error('Startup failed', error))
 }
 app.on('window-all-closed', () => { logger.info('All windows closed; keeping Cat Reminder in the tray') })
-app.on('before-quit', () => { scheduler?.stop(); if (syncTimer) clearInterval(syncTimer); logger.info('Cat Reminder shutting down') })
+app.on('before-quit', () => {
+  scheduler?.stop()
+  if (syncTimer) clearInterval(syncTimer)
+  if (rollupTimer) clearInterval(rollupTimer)
+  logger.info('Cat Reminder shutting down')
+})

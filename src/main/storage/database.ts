@@ -75,6 +75,21 @@ const migrations = [
     sql: `
       ALTER TABLE reminders ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
     `
+  },
+  {
+    version: 4,
+    sql: `
+      -- Reminders are now kinded: 'timed' (current behavior), 'all-day' (due date,
+      -- no time) and 'anytime' (no date, start_at holds the sentinel placeholder).
+      ALTER TABLE reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'timed';
+      -- Per-day state for the daily task roll-up (the cat showing all time-less
+      -- tasks for the day at a configurable time).
+      CREATE TABLE IF NOT EXISTS daily_task_reminder_state (
+        date TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        snooze_until TEXT
+      );
+    `
   }
 ]
 

@@ -1,9 +1,9 @@
 import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
-import type { CreateReminderInput, Reminder, UpdateReminderInput } from '../../shared/types/reminder'
+import { ANYTIME_SENTINEL_START, type CreateReminderInput, type Reminder, type UpdateReminderInput } from '../../shared/types/reminder'
 
 export type ReminderRow = {
-  id: string; title: string; description: string | null; start_at: string; end_at: string | null
+  id: string; kind: Reminder['kind']; title: string; description: string | null; start_at: string; end_at: string | null
   timezone: string; repeat_rule: string | null; priority: Reminder['priority']; status: Reminder['status']; enabled: number
   source: Reminder['source']; source_event_id: string | null; source_calendar_id: string | null
   snooze_until: string | null; series_id: string | null; occurrence_key: string | null
@@ -12,7 +12,7 @@ export type ReminderRow = {
 
 function fromRow(row: ReminderRow): Reminder {
   return {
-    id: row.id, title: row.title, description: row.description ?? undefined, startAt: row.start_at,
+    id: row.id, kind: row.kind, title: row.title, description: row.description ?? undefined, startAt: row.start_at,
     endAt: row.end_at ?? undefined, timezone: row.timezone,
     repeatRule: row.repeat_rule ? JSON.parse(row.repeat_rule) : undefined, priority: row.priority,
     status: row.status, enabled: row.enabled === 1, source: row.source, sourceEventId: row.source_event_id ?? undefined,
@@ -22,11 +22,15 @@ function fromRow(row: ReminderRow): Reminder {
   }
 }
 
-function toValues(reminder: Reminder): unknown[] {    return [reminder.id, reminder.title, reminder.description ?? null, reminder.startAt, reminder.endAt ?? null,
+function toValues(reminder: Reminder): unknown[] {    return [reminder.id, reminder.kind, reminder.title, reminder.description ?? null, reminder.startAt, reminder.endAt ?? null,
     reminder.timezone, reminder.repeatRule ? JSON.stringify(reminder.repeatRule) : null, reminder.priority,
     reminder.status, reminder.enabled ? 1 : 0, reminder.source, reminder.sourceEventId ?? null, reminder.sourceCalendarId ?? null,
     reminder.snoozeUntil ?? null, reminder.seriesId ?? null, reminder.occurrenceKey ?? null,
     reminder.createdAt, reminder.updatedAt]
+}
+
+function sameLocalDate(left: Date, right: Date): boolean {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate()
 }
 
 export class ReminderRepository {
@@ -44,9 +48,13 @@ export class ReminderRepository {
   create(input: CreateReminderInput): Reminder {
     const now = new Date().toISOString()
     const id = randomUUID()
+    const kind = input.kind ?? 'timed'
     const reminder: Reminder = {
-      ...input, id, enabled: input.enabled ?? true, status: 'upcoming', source: 'manual',
-      seriesId: input.repeatRule ? id : undefined, occurrenceKey: input.repeatRule ? input.startAt : undefined,
+      ...input, id, kind,
+      // `anytime` tasks have no date; store the sentinel placeholder so start_at stays non-null.
+      startAt: kind === 'anytime' ? ANYTIME_SENTINEL_START : (input.startAt ?? ANYTIME_SENTINEL_START),
+      enabled: input.enabled ?? true, status: 'upcoming', source: 'manual',
+      seriesId: input.repeatRule ? id : undefined, occurrenceKey: input.repeatRule ? (input.startAt ?? now) : undefined,
       createdAt: now, updatedAt: now
     }
     this.insert(reminder)
@@ -109,20 +117,26 @@ export class ReminderRepository {
 
   dueCandidates(now: Date, leadMinutes: number): Reminder[] {
     const upper = new Date(now.getTime() + leadMinutes * 60_000).toISOString()
-    return (this.db.prepare(`SELECT * FROM reminders WHERE enabled = 1 AND status NOT IN ('completed','dismissed') AND start_at <= ? AND (snooze_until IS NULL OR snooze_until <= ?) ORDER BY start_at ASC`).all(upper, now.toISOString()) as ReminderRow[]).map(fromRow)
+    return (this.db.prepare(`SELECT * FROM reminders WHERE enabled = 1 AND kind = 'timed' AND status NOT IN ('completed','dismissed') AND start_at <= ? AND (snooze_until IS NULL OR snooze_until <= ?) ORDER BY start_at ASC`).all(upper, now.toISOString()) as ReminderRow[]).map(fromRow)
+  }
+
+  /** Time-less tasks for the daily roll-up: uncompleted `anytime` items plus `all-day` items due on the given day. */
+  todayTasks(now = new Date()): Reminder[] {
+    const rows = this.db.prepare(`SELECT * FROM reminders WHERE kind IN ('all-day','anytime') AND enabled = 1 AND status NOT IN ('completed','dismissed') ORDER BY start_at ASC`).all() as ReminderRow[]
+    return rows.map(fromRow).filter((reminder) => reminder.kind === 'anytime' || sameLocalDate(new Date(reminder.startAt), now))
   }
 
   private insert(reminder: Reminder, upsert = false): void {
     const values = toValues(reminder)
     if (!upsert) {
-      this.db.prepare(`INSERT INTO reminders
-        (id,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values)
+    this.db.prepare(`INSERT INTO reminders
+      (id,kind,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(...values)
       return
     }
     this.db.prepare(`INSERT INTO reminders
-      (id,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      (id,kind,title,description,start_at,end_at,timezone,repeat_rule,priority,status,enabled,source,source_event_id,source_calendar_id,snooze_until,series_id,occurrence_key,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(source, source_event_id) DO UPDATE SET
         title=excluded.title,
         description=excluded.description,

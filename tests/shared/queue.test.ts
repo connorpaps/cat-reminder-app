@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { TriggerQueue } from '../../src/main/scheduler/trigger-queue'
 import type { Reminder } from '../../src/shared/types/reminder'
 
-const reminder = (id: string): Reminder => ({ id, title: id, startAt: '2026-01-01T00:00:00Z', timezone: 'UTC', priority: 'normal', status: 'due', enabled: true, source: 'manual', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' })
+const reminder = (id: string): Reminder => ({ id, title: id, kind: 'timed', startAt: '2026-01-01T00:00:00Z', timezone: 'UTC', priority: 'normal', status: 'due', enabled: true, source: 'manual', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' })
 
 describe('TriggerQueue', () => {
   it('shows one reminder and queues the rest in order without active duplicates', () => {

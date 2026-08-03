@@ -12,6 +12,7 @@ export interface GoogleCalendarClient {
 export function calendarEventToReminder(event: CalendarEvent, now = new Date()): Reminder {
   return {
     id: `google:${event.calendarId}:${event.id}`,
+    kind: 'timed',
     title: event.title || 'Untitled calendar event',
     description: event.description,
     startAt: event.startAt,

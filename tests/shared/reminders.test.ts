@@ -5,7 +5,7 @@ import { complete, dismiss, snooze, statusAt } from '../../src/shared/reminders/
 import type { Reminder } from '../../src/shared/types/reminder'
 
 const base: Reminder = {
-  id: 'r1', title: 'Review', startAt: '2026-01-10T10:00:00.000Z', timezone: 'UTC',
+  id: 'r1', kind: 'timed', title: 'Review', startAt: '2026-01-10T10:00:00.000Z', timezone: 'UTC',
   priority: 'normal', status: 'upcoming', enabled: true, source: 'manual', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
 }
 
@@ -14,6 +14,13 @@ describe('reminder rules', () => {
     const now = new Date('2026-01-10T09:56:00.000Z')
     expect(statusAt(base, now, 5)).toBe('due')
     expect(statusAt(base, new Date('2026-01-10T09:00:00.000Z'), 5)).toBe('soon')
+  })
+
+  it('never reports time-less tasks as due or overdue', () => {
+    const anytime: Reminder = { ...base, kind: 'anytime', startAt: '1970-01-01T00:00:00.000Z' }
+    const allDay: Reminder = { ...base, kind: 'all-day', startAt: '2026-01-10T00:00:00.000Z' }
+    expect(statusAt(anytime, new Date('2026-01-10T09:56:00.000Z'), 5)).toBe('upcoming')
+    expect(statusAt(allDay, new Date('2026-01-10T09:56:00.000Z'), 5)).toBe('upcoming')
   })
 
   it('snoozes until the requested future time', () => {

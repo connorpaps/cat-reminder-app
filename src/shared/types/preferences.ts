@@ -13,6 +13,10 @@ export type Preferences = {
   syncEnabled: boolean
   syncIntervalMinutes: number
   fullscreenPolicy: FullscreenPolicy
+  /** Show the day's time-less tasks as one cat roll-up at `dailyTaskReminderTime` each day. */
+  dailyTaskReminderEnabled: boolean
+  /** Local wall-clock time (HH:mm) at which the daily task roll-up appears. */
+  dailyTaskReminderTime: string
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -26,5 +30,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   snoozeMinutes: 10,
   syncEnabled: false,
   syncIntervalMinutes: 5,
-  fullscreenPolicy: 'respect'
+  fullscreenPolicy: 'respect',
+  dailyTaskReminderEnabled: true,
+  dailyTaskReminderTime: '09:00'
 }

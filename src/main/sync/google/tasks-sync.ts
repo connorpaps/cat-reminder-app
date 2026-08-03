@@ -1,5 +1,5 @@
 import { google } from 'googleapis'
-import type { Reminder } from '../../../shared/types/reminder'
+import { ANYTIME_SENTINEL_START, type Reminder } from '../../../shared/types/reminder'
 import { ReminderRepository } from '../../storage/reminder-repository'
 
 export type GoogleTaskItem = {
@@ -25,29 +25,43 @@ export type TasksSyncResult = {
 
 export interface GoogleTasksClient {
   listTaskLists(): Promise<GoogleTaskList[]>
-  listUpcomingTasks(taskListIds: string[], dueMax: string): Promise<GoogleTaskItem[]>
+  listAllTasks(taskListIds: string[]): Promise<GoogleTaskItem[]>
 }
 
-export function taskToReminder(task: GoogleTaskItem, now = new Date()): Reminder | null {
-  // Skip tasks without a due date — they aren't time-sensitive reminders.
-  if (!task.due) return null
-  return {
+/** Google Tasks date-only tasks use 00:00:00 UTC as their due timestamp. */
+function isDateOnlyDue(due: Date): boolean {
+  return due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0 && due.getUTCMilliseconds() === 0
+}
+
+export function taskToReminder(task: GoogleTaskItem, now = new Date()): Reminder {
+  const completed = task.status === 'completed'
+  const base: Omit<Reminder, 'kind' | 'startAt'> = {
     id: `google-tasks:${task.taskListId}:${task.id}`,
     title: task.title || 'Untitled task',
     description: task.notes,
-    startAt: task.due,
-    endAt: undefined,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     priority: 'normal',
-    status: task.status === 'completed' ? 'completed' : 'upcoming',
-    enabled: task.status !== 'completed',
+    status: completed ? 'completed' : 'upcoming',
+    enabled: !completed,
     source: 'google-tasks',
     sourceEventId: task.id,
     sourceCalendarId: task.taskListId,
+    endAt: undefined,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString()
   }
+  // Tasks without a due date are time-less: they feed the daily task roll-up every day.
+  if (!task.due) return { ...base, kind: 'anytime', startAt: ANYTIME_SENTINEL_START }
+  const due = new Date(task.due)
+  // A 00:00:00 UTC due means date-only → 'all-day' at local midnight of that date.
+  if (isDateOnlyDue(due)) {
+    const localMidnight = new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
+    return { ...base, kind: 'all-day', startAt: localMidnight.toISOString() }
+  }
+  return { ...base, kind: 'timed', startAt: task.due }
 }
+
+const IMPORT_WINDOW_MS = 60 * 86_400_000
 
 export class GoogleTasksSyncService {
   constructor(
@@ -56,15 +70,19 @@ export class GoogleTasksSyncService {
   ) {}
 
   async sync(taskListIds: string[], now = new Date()): Promise<TasksSyncResult> {
-    const dueMax = new Date(now.getTime() + 60 * 86_400_000).toISOString()
-    const tasks = await this.client.listUpcomingTasks(taskListIds, dueMax)
+    const tasks = await this.client.listAllTasks(taskListIds)
     let imported = 0
     let updated = 0
+    let skipped = 0
 
     for (const task of tasks) {
-      if (!task.due) continue
       const reminder = taskToReminder(task, now)
-      if (!reminder) continue
+      // Timed/all-day tasks are only imported inside the rolling window; time-less
+      // ('anytime') tasks always belong to the roll-up.
+      if (reminder.kind !== 'anytime' && new Date(reminder.startAt).getTime() > now.getTime() + IMPORT_WINDOW_MS) {
+        skipped += 1
+        continue
+      }
       const existing = this.repository.list().find(
         (item) => item.sourceEventId === task.id && item.sourceCalendarId === task.taskListId && item.source === 'google-tasks'
       )
@@ -73,7 +91,7 @@ export class GoogleTasksSyncService {
       else imported += 1
     }
 
-    return { imported, updated, skipped: 0, syncedAt: now.toISOString() }
+    return { imported, updated, skipped, syncedAt: now.toISOString() }
   }
 }
 
@@ -96,14 +114,16 @@ export function createGoogleTasksClient(config: {
         title: item.title ?? 'Unnamed task list'
       })).filter((item) => item.id)
     },
-    async listUpcomingTasks(taskListIds, dueMax) {
+    async listAllTasks(taskListIds) {
       const items: GoogleTaskItem[] = []
       for (const taskListId of taskListIds) {
+        // No dueMax filter: the Google Tasks API excludes tasks without a due date
+        // when a due filter is set, and those are exactly the ones we now import
+        // as time-less tasks. Filtering happens in the sync service instead.
         const response = await tasks.tasks.list({
           tasklist: taskListId,
           showCompleted: false,
           showHidden: false,
-          dueMax,
           maxResults: 100
         })
         for (const task of response.data.items ?? []) {

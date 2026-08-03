@@ -20,6 +20,16 @@ let visualWindow: BrowserWindow | undefined
 let visualState = createReadyState()
 let overlayInitialization: Promise<void> | undefined
 
+// Distance (px) from the bottom of the overlay window to the line the cat walks on.
+// The display work area excludes the taskbar, so for a bottom-docked taskbar this
+// equals the taskbar height and the cat's feet rest exactly on the taskbar's top edge.
+// For any other layout (top/left/right-docked, auto-hide taskbar, or no taskbar) it
+// falls back to the bottom of the work area so the cat always stays fully visible.
+function catWalkBaseline(display: Electron.Display): number {
+  const { bounds, workArea } = display
+  return bounds.y + bounds.height - (workArea.y + workArea.height)
+}
+
 function resetReadyState(): void {
   visualState = createReadyState()
 }
@@ -52,12 +62,12 @@ async function waitForReady(): Promise<void> {
 async function createOverlayWindow(): Promise<void> {
   destroyOverlayWindow()
   try {
-    const workArea = screen.getPrimaryDisplay().workArea
+    const { bounds } = screen.getPrimaryDisplay()
     visualWindow = new BrowserWindow({
-      x: workArea.x,
-      y: workArea.y,
-      width: workArea.width,
-      height: workArea.height,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
       show: false,
       transparent: true,
       frame: false,
@@ -99,8 +109,12 @@ export async function showOverlay(payload: OverlayReminder, policy: FullscreenPo
   }
 
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const bounds = display.workArea
-  const nextPayload: OverlayReminder = { ...payload, animationStartedAt: payload.animationStartedAt ?? Date.now() }
+  const bounds = display.bounds
+  const nextPayload: OverlayReminder = {
+    ...payload,
+    animationStartedAt: payload.animationStartedAt ?? Date.now(),
+    walkBaselineFromBottom: catWalkBaseline(display)
+  }
   visualWindow!.setBounds({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height })
   visualWindow!.webContents.send('overlay:show', nextPayload)
   visualWindow!.setIgnoreMouseEvents(true, { forward: true })

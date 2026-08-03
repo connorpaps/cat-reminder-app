@@ -162,6 +162,22 @@ export function PopupApp() {
                   <option value={30}>30 min</option>
                 </select>
               </label>
+              <label className="popup-setting">
+                <span>Daily task reminder:</span>
+                <input
+                  type="time"
+                  value={preferences.dailyTaskReminderTime}
+                  onChange={(e) => void updatePreference('dailyTaskReminderTime', e.target.value)}
+                />
+              </label>
+              <label className="popup-setting">
+                <span>Daily tasks enabled:</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.dailyTaskReminderEnabled}
+                  onChange={(e) => void updatePreference('dailyTaskReminderEnabled', e.target.checked)}
+                />
+              </label>
             </div>
           </div>
         )}
