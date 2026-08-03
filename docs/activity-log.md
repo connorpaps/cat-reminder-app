@@ -280,3 +280,40 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - src/shared/types/sync.ts
   - src/shared/types/ticktick.ts
   - tests/shared/ticktick-sync.test.ts
+
+## 2026-08-02 23:00 — `b3894f2`
+**Resolve TickTick OAuth; full app audit, security hardening, and cleanup**
+
+  - .env.example
+  - README.md
+  - assets/Idle.png
+  - assets/Running.png
+  - assets/textbox.png
+  - docs/activity-log.md
+  - electron.vite.config.ts
+  - handoff.md
+  - knowledge.md
+  - package.json
+  - pnpm-lock.yaml
+  - reference_reminder_app.png
+  - scripts/ticktick-live-test.mjs
+  - src/main/index.ts
+  - src/main/scheduler/reminder-scheduler.ts
+  - src/main/scheduler/trigger-queue.ts
+  - src/main/storage/preferences-repository.ts
+  - src/main/storage/reminder-repository.ts
+  - src/main/sync/google/calendar-sync.ts
+  - src/main/sync/google/oauth.ts
+  - src/main/sync/google/refresh.ts
+  - src/main/sync/google/tasks-sync.ts
+  - src/main/sync/ticktick/ticktick-sync.ts
+  - src/main/windows/fullscreen-policy.ts
+  - src/main/windows/overlay-window.ts
+  - src/main/windows/popup-window.ts
+  - src/preload/index.ts
+  - src/preload/overlay.d.ts
+  - src/renderer/popup/PopupApp.tsx
+  - src/shared/animation.ts
+  - src/shared/ipc.ts
+  - src/shared/types/overlay.ts
+  - tests/shared/animation.test.ts
