@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
-const migrations = [
+export const migrations = [
   {
     version: 1,
     sql: `
@@ -47,8 +47,6 @@ const migrations = [
   {
     version: 2,
     sql: `
-      -- Keep the most recently updated occurrence row so local completion,
-      -- dismissal, snooze, and edits survive duplicate repair deterministically.
       DELETE FROM reminders AS duplicate
       WHERE duplicate.series_id IS NOT NULL
         AND duplicate.occurrence_key IS NOT NULL
@@ -72,32 +70,52 @@ const migrations = [
   },
   {
     version: 3,
-    sql: `
-      ALTER TABLE reminders ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;
-    `
+    sql: `ALTER TABLE reminders ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1;`
   },
   {
     version: 4,
     sql: `
-      -- Reminders are now kinded: 'timed' (current behavior), 'all-day' (due date,
-      -- no time) and 'anytime' (no date, start_at holds the sentinel placeholder).
       ALTER TABLE reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'timed';
-      -- Per-day state for the daily task roll-up (the cat showing all time-less
-      -- tasks for the day at a configurable time).
       CREATE TABLE IF NOT EXISTS daily_task_reminder_state (
         date TEXT PRIMARY KEY,
         status TEXT NOT NULL,
         snooze_until TEXT
       );
     `
+  },
+  {
+    version: 5,
+    sql: `
+      CREATE TABLE IF NOT EXISTS snooze_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reminder_id TEXT NOT NULL,
+        occurrence_key TEXT,
+        snoozed_at TEXT NOT NULL,
+        snooze_until TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        FOREIGN KEY (reminder_id) REFERENCES reminders(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_snooze_history_reminder ON snooze_history(reminder_id, snoozed_at);
+    `
+  },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS daily_task_snooze_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        snoozed_at TEXT NOT NULL,
+        snooze_until TEXT NOT NULL,
+        duration_minutes INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_daily_task_snooze_history_date
+        ON daily_task_snooze_history(date, snoozed_at);
+    `
   }
 ]
 
-export function createDatabase(filePath = join(app.getPath('userData'), 'cat-reminder.sqlite')): Database.Database {
-  mkdirSync(dirname(filePath), { recursive: true })
-  const db = new Database(filePath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
+/** Apply every missing migration to an already-open SQLite database. */
+export function applyMigrations(db: Database.Database): void {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)')
   const applied = new Set(
     db.prepare('SELECT version FROM schema_migrations').all().map((row) => (row as { version: number }).version)
@@ -105,12 +123,23 @@ export function createDatabase(filePath = join(app.getPath('userData'), 'cat-rem
   const insert = db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)')
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue
-    const alreadyHasEnabled = migration.version === 3 && (db.prepare('PRAGMA table_info(reminders)').all() as Array<{ name: string }>).some((column) => column.name === 'enabled')
+    const alreadyHasEnabled = migration.version === 3
+      && (db.prepare('PRAGMA table_info(reminders)').all() as Array<{ name: string }>).some((column) => column.name === 'enabled')
     const apply = db.transaction(() => {
       if (!alreadyHasEnabled) db.exec(migration.sql)
       insert.run(migration.version, new Date().toISOString())
     })
     apply()
   }
+}
+
+export function createDatabase(filePath = join(app.getPath('userData'), 'cat-reminder.sqlite')): Database.Database {
+  mkdirSync(dirname(filePath), { recursive: true })
+  const db = new Database(filePath)
+  db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = ON')
+  applyMigrations(db)
   return db
 }
+
+export const migrationVersions = migrations.map((migration) => migration.version)

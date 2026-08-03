@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { OverlayReminder, OverlayTaskItem } from '../../shared/types/overlay'
 import { TEXTBOX_LARGE_SPRITE, TEXTBOX_SPRITE, catAnimationsFor, phaseAt, spriteOffset, totalShowDurationMs, traversalPositionAt, type TextboxSpriteManifest } from '../../shared/animation'
 import { assetUrl } from '../../shared/assets'
+import { sceneCenterPercent } from '../../shared/display-geometry'
 
 const intensityFps = { low: 6, medium: 10, high: 14 } as const
 const CAT_HEIGHT = 192
@@ -16,7 +17,7 @@ type TextboxProps = {
   rollup?: boolean
   sprite: TextboxSpriteManifest
   assetBaseUrl?: string
-  onAction: (action: 'snooze' | 'dismiss' | 'complete') => void
+  onAction: (action: 'snooze' | 'dismiss') => void
 }
 
 function Textbox({ reminder, taskItems, rollup, sprite, assetBaseUrl, onAction }: TextboxProps) {
@@ -60,10 +61,7 @@ function Textbox({ reminder, taskItems, rollup, sprite, assetBaseUrl, onAction }
             <button className="bubble-primary" aria-label="Dismiss task reminder for today" onClick={() => onAction('dismiss')}>Dismiss</button>
           </>
         ) : (
-          <>
-            <button aria-label="Dismiss reminder" onClick={() => onAction('dismiss')}>Dismiss</button>
-            <button className="bubble-primary" aria-label="Complete reminder" onClick={() => onAction('complete')}>Done</button>
-          </>
+          <button className="bubble-primary" aria-label="Hide reminder" onClick={() => onAction('dismiss')}>Hide</button>
         )}
       </div>
     </div>
@@ -133,10 +131,14 @@ export function OverlayApp() {
   const elapsed = payload ? clock - (payload.animationStartedAt ?? Date.parse(payload.queuedAt)) : 0
   const phase = phaseAt(elapsed)
   const catLeft = traversalPositionAt(elapsed)
-  const sceneLeft = catLeft
   // The daily task roll-up uses the larger textbox panel so its list fits.
   const bubbleSprite = payload?.rollup ? TEXTBOX_LARGE_SPRITE : TEXTBOX_SPRITE
   const bubbleWidth = bubbleSprite.panelWidth * bubbleSprite.scale
+  // Only clamp during the idle pause. During the walk the entire scene is
+  // allowed to leave the display, preserving the intended off-screen exit.
+  const sceneLeft = phase === 'pausing'
+    ? sceneCenterPercent(catLeft, window.innerWidth, bubbleWidth)
+    : catLeft
   const bubbleHeight = bubbleSprite.panelHeight * bubbleSprite.scale
   // Idle in place at the end of the walk so the cat rests before walking off.
   const catAnimations = catAnimationsFor(payload?.catId)
@@ -165,7 +167,7 @@ export function OverlayApp() {
     overlayWindow.catOverlay.action(payload.reminder.id, 'dismiss')
   }, [overlayWindow.catOverlay, payload])
 
-  const handleAction = useCallback((action: 'snooze' | 'dismiss' | 'complete') => {
+  const handleAction = useCallback((action: 'snooze' | 'dismiss') => {
     interactedRef.current = true
     overlayWindow.catOverlay.action(payload!.reminder.id, action)
   }, [overlayWindow.catOverlay, payload])

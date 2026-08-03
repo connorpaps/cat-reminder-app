@@ -38,9 +38,9 @@ describe('ticktick taskToReminder', () => {
     expect(reminder.kind).toBe('all-day')
   })
 
-  it('marks completed tasks as completed and disabled', () => {
+  it('hides externally completed tasks without marking them completed locally', () => {
     const reminder = taskToReminder({ ...baseTask, status: 2 })
-    expect(reminder.status).toBe('completed')
+    expect(reminder.status).toBe('dismissed')
     expect(reminder.enabled).toBe(false)
   })
 

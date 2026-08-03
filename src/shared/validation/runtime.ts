@@ -35,7 +35,7 @@ function validRepeatRule(value: unknown): boolean {
 }
 
 export function isReminderId(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 128 }
-export function isReminderAction(value: unknown): value is 'snooze' | 'dismiss' | 'complete' { return value === 'snooze' || value === 'dismiss' || value === 'complete' }
+export function isReminderAction(value: unknown): value is 'snooze' | 'dismiss' { return value === 'snooze' || value === 'dismiss' }
 
 export function isCreateReminderInput(value: unknown): value is CreateReminderInput {
   if (!value || typeof value !== 'object') return false

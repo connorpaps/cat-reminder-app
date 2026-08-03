@@ -1,7 +1,7 @@
 import { addMinutes } from 'date-fns'
 import { describe, expect, it } from 'vitest'
 import { nextOccurrence, occurrenceKey } from '../../src/shared/reminders/recurrence'
-import { complete, dismiss, snooze, statusAt } from '../../src/shared/reminders/state'
+import { dismiss, snooze, statusAt } from '../../src/shared/reminders/state'
 import type { Reminder } from '../../src/shared/types/reminder'
 
 const base: Reminder = {
@@ -28,8 +28,7 @@ describe('reminder rules', () => {
     expect(snooze(base, 10, now).snoozeUntil).toBe(addMinutes(now, 10).toISOString())
   })
 
-  it('completes and dismisses only the current occurrence', () => {
-    expect(complete(base).status).toBe('completed')
+  it('dismisses only the current occurrence', () => {
     expect(dismiss(base).status).toBe('dismissed')
   })
 

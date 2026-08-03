@@ -82,9 +82,9 @@ input, select { font: inherit; }
 }
 .popup-account > summary::-webkit-details-marker { display: none; }
 .popup-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   cursor: pointer;
 }
@@ -100,12 +100,10 @@ input, select { font: inherit; }
   align-items: center;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
   color: #6b3f27;
   font-size: 9px;
   font-weight: 500;
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .popup-label {
@@ -254,11 +252,17 @@ input, select { font: inherit; }
 }
 
 .popup-error {
+  max-width: 100%;
+  max-height: 96px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
   color: #a33;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  text-align: center;
+  line-height: 1.25;
+  text-align: left;
   padding: 4px 0 0;
+  scrollbar-width: thin;
 }
 
 .popup-sync-age {

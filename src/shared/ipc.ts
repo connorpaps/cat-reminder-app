@@ -9,7 +9,7 @@ export type ReminderApi = {
   create: (input: CreateReminderInput) => Promise<Reminder>
   update: (id: string, input: UpdateReminderInput) => Promise<Reminder | null>
   remove: (id: string) => Promise<boolean>
-  action: (id: string, action: Extract<OverlayAction, 'snooze' | 'dismiss' | 'complete'>) => Promise<Reminder | null>
+  action: (id: string, action: Extract<OverlayAction, 'snooze' | 'dismiss'>) => Promise<Reminder | null>
 }
 
 export type PreferencesApi = {
@@ -53,7 +53,7 @@ declare global {
     catReminder: CatReminderApi
     catOverlay: {
       onShow: (listener: (payload: OverlayReminder) => void) => () => void
-      action: (id: string, action: 'snooze' | 'dismiss' | 'complete') => void
+      action: (id: string, action: 'snooze' | 'dismiss') => void
       ready: () => void
       setIgnoreMouseEvents: (ignore: boolean) => void
       animationComplete: (id: string) => void

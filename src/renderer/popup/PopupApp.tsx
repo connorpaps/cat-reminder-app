@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CAT_IDS, CATS } from '../../shared/animation'
 import { assetUrl } from '../../shared/assets'
+import { formatSyncError } from '../../shared/sync-errors'
 import type { SyncStatus, TickTickSyncStatus } from '../../shared/types/sync'
 import type { Preferences } from '../../shared/types/preferences'
 
@@ -25,6 +26,7 @@ export function PopupApp() {
   const [googleAccountOpen, setGoogleAccountOpen] = useState(true)
   const [ticktickAccountOpen, setTicktickAccountOpen] = useState(true)
   const [assetBase, setAssetBase] = useState<string | undefined>(undefined)
+  const initialStatusLoaded = useRef(false)
 
   const refresh = async () => {
     const [nextPreferences, nextSync, nextTicktick, baseUrl] = await Promise.all([
@@ -36,10 +38,15 @@ export function PopupApp() {
     setPreferences(nextPreferences)
     setSync(nextSync)
     setTicktick(nextTicktick)
-    // Connected account sections start compact, but subsequent refreshes must
+    const providerError = nextSync.error ?? nextTicktick.error
+    if (providerError) setError(providerError)
+    // Connected account sections start compact once; subsequent refreshes must
     // not override the user's current open/closed choice.
-    if (nextSync.connected) setGoogleAccountOpen((open) => sync === null ? false : open)
-    if (nextTicktick.connected) setTicktickAccountOpen((open) => ticktick === null ? false : open)
+    if (!initialStatusLoaded.current) {
+      setGoogleAccountOpen(!nextSync.connected)
+      setTicktickAccountOpen(!nextTicktick.connected)
+      initialStatusLoaded.current = true
+    }
     setAssetBase(baseUrl)
   }
 
@@ -63,7 +70,7 @@ export function PopupApp() {
       setSync({ connected: result.connected, calendars: result.calendars, selectedCalendarIds: result.calendars.filter((c) => c.primary).map((c) => c.id) })
       setNotice('Account connected. Syncing now…')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Connection failed.')
+      setError(formatSyncError(caught) || 'Connection failed.')
     }
   }
 
@@ -75,7 +82,7 @@ export function PopupApp() {
       setSync((prev) => prev ? { ...prev, calendars: result.calendars, lastSyncAt: result.syncedAt } : prev)
       setNotice(`Synced ${result.imported + result.updated} items.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Sync failed.')
+      setError(formatSyncError(caught) || 'Sync failed.')
     } finally {
       setSyncing(false)
     }
@@ -85,6 +92,7 @@ export function PopupApp() {
     // The main process decides whether auto-sync stays on (it stays on while
     // TickTick is still connected), so the UI must not force it off here.
     const status = await window.catReminder.sync.disconnect()
+    setError('')
     setSync(status)
   }
 
@@ -100,7 +108,7 @@ export function PopupApp() {
       setTicktick(status)
       setNotice('TickTick connected. Syncing now…')
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'TickTick connection failed.')
+      setError(formatSyncError(caught) || 'TickTick connection failed.')
     }
   }
 
@@ -112,7 +120,7 @@ export function PopupApp() {
       setTicktick((prev) => prev ? { ...prev, lastSyncAt: result.syncedAt } : prev)
       setNotice(`TickTick synced ${result.imported + result.updated} items.`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'TickTick sync failed.')
+      setError(formatSyncError(caught) || 'TickTick sync failed.')
     } finally {
       setTickticking(false)
     }
@@ -120,6 +128,7 @@ export function PopupApp() {
 
   async function disconnectTickTick() {
     const status = await window.catReminder.ticktick.disconnect()
+    setError('')
     setTicktick(status)
   }
 
@@ -150,7 +159,7 @@ export function PopupApp() {
           <summary className="popup-summary">
             <span className="popup-label">🔗 Google Account</span>
             {sync?.connected && (
-              <span className="popup-summary-status"><span className="popup-dot on" /> Connected{sync.lastSyncAt && ` · Synced ${timeAgo(sync.lastSyncAt)}`}</span>
+              <span className="popup-summary-status"><span className="popup-dot on" /> {sync.lastSyncAt ? `Synced ${timeAgo(sync.lastSyncAt)}` : 'Connected'}</span>
             )}
           </summary>
           {!sync?.connected ? (
@@ -201,7 +210,7 @@ export function PopupApp() {
           <summary className="popup-summary">
             <span className="popup-label">✅ TickTick Account</span>
             {ticktick?.connected && (
-              <span className="popup-summary-status"><span className="popup-dot on" /> Connected{ticktick.lastSyncAt && ` · Synced ${timeAgo(ticktick.lastSyncAt)}`}</span>
+              <span className="popup-summary-status"><span className="popup-dot on" /> {ticktick.lastSyncAt ? `Synced ${timeAgo(ticktick.lastSyncAt)}` : 'Connected'}</span>
             )}
           </summary>
           {!ticktick?.connected ? (
@@ -290,12 +299,28 @@ export function PopupApp() {
                 </select>
               </label>
               <label className="popup-setting">
+                <span>Sync enabled:</span>
+                <input
+                  type="checkbox"
+                  checked={preferences.syncEnabled}
+                  onChange={(e) => void updatePreference('syncEnabled', e.target.checked)}
+                />
+              </label>
+              <label className="popup-setting">
                 <span>Sync calendar every:</span>
                 <select value={preferences.syncIntervalMinutes} onChange={(e) => void updatePreference('syncIntervalMinutes', Number(e.target.value))}>
                   <option value={2}>2 min</option>
                   <option value={5}>5 min</option>
                   <option value={10}>10 min</option>
                   <option value={30}>30 min</option>
+                </select>
+              </label>
+              <label className="popup-setting">
+                <span>Fullscreen:</span>
+                <select value={preferences.fullscreenPolicy} onChange={(e) => void updatePreference('fullscreenPolicy', e.target.value as Preferences['fullscreenPolicy'])}>
+                  <option value="respect">Respect fullscreen</option>
+                  <option value="show">Always show</option>
+                  <option value="suppress">Never show</option>
                 </select>
               </label>
               <label className="popup-setting">

@@ -26,6 +26,6 @@ export type TickTickTask = {
 export type TickTickSyncResult = {
   imported: number
   updated: number
-  completed: number
+  hidden: number
   syncedAt: string
 }

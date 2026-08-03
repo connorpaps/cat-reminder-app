@@ -1,6 +1,6 @@
 # Cat Reminder — Session Handoff
 
-**Last updated:** August 2, 2026  
+**Last updated:** August 3, 2026
 **Project:** Windows-first, local-first cat-themed desktop reminder app  
 **Runtime target:** Node.js 22 LTS + pnpm 11  
 **GitHub:** https://github.com/connorpaps/cat-reminder-app (remote: `origin`, branch: `main` — was `master`, renamed 2026-08-02)
@@ -13,15 +13,43 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 **Single-instance lock is active.** Running `pnpm dev` twice or double-clicking the executable will focus the existing instance instead of spawning a duplicate tray icon.
 
+## Work completed this session (August 3, 2026) — reliability and release-readiness plan
+
+Implemented the agreed `spec_steps.md` plan while preserving the user's explicit exclusions: no manual reminder CRUD UI, no two-way sync, and no provider completion writes.
+
+### Implemented
+
+- Added popup controls for fullscreen behavior and the automatic sync switch. Manual Sync now remains available when automatic sync is disabled.
+- Added 10-minute sleep/wake reconciliation: at most one very recent missed timed reminder is eligible after wake; older missed reminders are suppressed instead of replayed as a burst.
+- Added periodic timezone-change detection and scheduler/daily-roll-up reconciliation.
+- Added logical-CSS-pixel display geometry safeguards for popup placement and idle overlay bubble centering, including 1080p/1440p coverage and negative monitor origins.
+- Added versioned SQLite migration v6 for daily roll-up snooze history, plus migration application helper and idempotency coverage where the Electron SQLite ABI is available.
+- Added database backup retention, startup recovery guidance, reminder and roll-up snooze history, Google token refresh-token merging, invalid-grant token clearing, and provider disappearance scoping.
+- Tightened Google Calendar pruning to its 60-day query window and TickTick pruning to successfully returned projects only.
+- Enforced display-only actions: no Done action is exposed, synced items are read-only, and no provider completion API is called.
+
+### Fresh validation
+
+- `corepack pnpm test -- --run`: **65 passed, 1 skipped**. The skipped native migration integration test requires Electron ABI 135; system Node uses ABI 137.
+- `corepack pnpm typecheck`: passed.
+- `corepack pnpm build`: passed.
+- Dev app restarted successfully; log showed `Cat Reminder started` and repeated successful Google syncs.
+- Current Windows display probe reported 2560×1440; no startup errors appeared in the dev log.
+- `git diff --check`: clean.
+
+### Remaining before release
+
+Manual/device validation is still required for actual Windows suspend/resume, timezone changes, 1920×1080 and mixed-DPI monitors, monitor removal/repositioning, and the packaged Windows installer. The startup recovery flow currently opens the backup folder and explains recovery; it does not automatically restore a backup. The implementation and test changes are included in this release-readiness commit.
+
 ## Work completed this session (August 2, 2026) — TickTick integration
 
 ### 22. TickTick Open API integration (display-only sidekick)
 
-Approved plan: direct official TickTick Open API (NOT the Google Calendar bridge — research showed it only syncs tasks *with time attributes*, so date-less tasks would never reach the app and the daily roll-up would starve). Display-only: the app never writes to TickTick; scope is `tasks:read` only. Research sources: developer.ticktick.com OpenAPI spec (mirrored at mrzmyr/ticktick-openapi), TickTick help article on the Google Calendar integration, ticktick-py/openclaw/openapi-cli community docs.
+Approved plan: direct official TickTick Open API (NOT the Google Calendar bridge — research showed it only syncs tasks *with time attributes*, so date-less tasks would never reach the app and the daily roll-up would starve). Display-only: the app never writes to TickTick; OAuth requests `tasks:read tasks:write` because TickTick requires both, but no write endpoint is called. Research sources: developer.ticktick.com OpenAPI spec (mirrored at mrzmyr/ticktick-openapi), TickTick help article on the Google Calendar integration, ticktick-py/openclaw/openapi-cli community docs.
 
-- **OAuth** (`src/main/sync/ticktick/oauth.ts`): authorization-code flow at `ticktick.com/oauth/authorize` + `/oauth/token`, scopes `tasks:read tasks:write` (BOTH requested — the app stays display-only and never writes, but every working community implementation requests both; a bare `tasks:read` was suspected of triggering TickTick's `unknown_exception` at the consent step), **fixed redirect URI `http://127.0.0.1:14565/callback`** (pathless `:14565` was suspected of breaking authorize — openapi-cli always uses `/callback`). Token POST uses **HTTP Basic auth** (client_id:client_secret) + a `scope` parameter in the body (verified against ticktick-py + ticktick-openapi-cli). Self-serve app registration at `developer.ticktick.com/manage` (no approval; the app's **App Service URL must be set to `http://127.0.0.1:14565/callback`** on the exact record whose Client ID is in `.env` — multiple app records can exist). Tokens: access ~2h + refresh ~6 months; proactive refresh before expiry + one 401 retry in `runTickTickSync()`. Callback listener closes on every path (success/error/timeout) and closes a leftover listener before rebinding, so retries never EADDRINUSE on port 14565.
+- **OAuth** (`src/main/sync/ticktick/oauth.ts`): authorization-code flow at `ticktick.com/oauth/authorize` + `/oauth/token`, scopes `tasks:read tasks:write` (BOTH requested — the app stays display-only and never writes, but every working community implementation requests both; a bare `tasks:read` was suspected of triggering TickTick's `unknown_exception` at the consent step), **fixed redirect URI `http://127.0.0.1:14565/callback`** (pathless `:14565` was suspected of breaking authorize — openapi-cli always uses `/callback`). Token POST uses **HTTP Basic auth** (client_id:client_secret) + a `scope` parameter in the body (verified against ticktick-py + ticktick-openapi-cli). Self-serve app registration at `developer.ticktick.com/manage` (no approval; the app's **OAuth redirect URL must be set to `http://127.0.0.1:14565/callback`** on the exact record whose Client ID is in `.env` — multiple app records can exist). Tokens: access ~2h + refresh ~6 months; proactive refresh before expiry + one 401 retry in `runTickTickSync()`. Callback listener closes on every path (success/error/timeout) and closes a leftover listener before rebinding, so retries never EADDRINUSE on port 14565.
 - **Token store** (`src/main/storage/secure-token-store.ts`): provider-aware — `load/save/clear(provider)` with `google` keeping the existing `google-calendar.tokens` file (no token loss) and `ticktick.tokens` for the new provider.
-- **Sync service** (`src/main/sync/ticktick/ticktick-sync.ts`): plain `fetch` (no new deps). `GET /project` + `GET /project/{id}/data` (404 → skip). `taskToReminder()`: no `dueDate` → `anytime`; `isAllDay`/date-only → `all-day` at local midnight; else `timed`; `status 2` → completed; priorities 0/1/3/5 → normal/low/normal/high. Timed tasks imported inside a 60-day window. Upsert with `source: 'ticktick'` (sourceEventId = task id, sourceCalendarId = project id); status-2 tasks explicitly completed locally after upsert; tasks that disappear from the synced projects get marked completed (pruning scoped to synced project ids so deselected projects are untouched).
+- **Sync service** (`src/main/sync/ticktick/ticktick-sync.ts`): plain `fetch` (no new deps). `GET /project` + `GET /project/{id}/data` (404 → skip). `taskToReminder()`: no `dueDate` → `anytime`; `isAllDay`/date-only → `all-day` at local midnight; else `timed`; `status 2` → locally hidden/dismissed (never completed by Cat Reminder); priorities 0/1/3/5 → normal/low/normal/high. Timed tasks imported inside a 60-day window. Upsert with `source: 'ticktick'` (sourceEventId = task id, sourceCalendarId = project id); status-2 tasks explicitly hidden locally after upsert without marking them completed; tasks that disappear from successfully synced projects get hidden locally (pruning scoped to synced project ids so deselected projects are untouched).
 - **Wiring** (`src/main/index.ts`): `ticktick:status/connect/select-projects/refresh/disconnect` IPC; `runConfiguredSync` runs TickTick **independently of Google** (moved before the Google gate); `syncEnabled` invariant maintained across disconnects (only cleared when the *other* provider is also disconnected); read-only guard (`isExternalSource`) extended to `'ticktick'` for reminder edit/remove paths; boot restores ticktick metadata from `syncRepository.get('ticktick')`.
 - **UI** (`src/renderer/popup/PopupApp.tsx`): "✅ TickTick Account" section — Connect button, project checkboxes (default all), sync status + age, Sync now, Disconnect, plus a display-only note. Popup height 274×416 → 274×500 with scrollable content.
 - **Env**: `TICKTICK_CLIENT_ID` / `TICKTICK_CLIENT_SECRET` added to `.env.example` (redirect URI must be `http://127.0.0.1:14565/callback`).
@@ -419,7 +447,7 @@ Important files and responsibilities:
 - `src/main/sync/google/` — read-only Google Calendar + Tasks integration and OAuth
 - `src/main/sync/google/tasks-sync.ts` — **NEW** Google Tasks API client and sync service
 - `src/renderer/popup/PopupApp.tsx` — compact popup UI: Preview Cat, Google Account connect/sync (calendar + tasks), settings (send reminder lead time, sync interval)
-- `src/renderer/overlay/OverlayApp.tsx` — animated desktop cat scene and reminder bubble (60s auto-dismiss, Dismiss + Done buttons)
+- `src/renderer/overlay/OverlayApp.tsx` — animated desktop cat scene and reminder bubble (60s auto-dismiss, Hide buttons)
 - `src/renderer/styles.css` — popup + overlay pixel-art styling
 - `src/preload/` — context-isolated renderer and overlay APIs
 - `src/shared/` — shared types, IPC contracts, validation, recurrence, state, and animation metadata
@@ -482,7 +510,7 @@ The current `detectFullscreen` spawns a PowerShell process with a 750ms timeout.
 
 - Create a Google Calendar event ~7 minutes in the future
 - Sync and wait for the cat at the 5-minute mark
-- Confirm Snooze, Dismiss, and Done update state correctly
+- Confirm Snooze and Hide update state correctly
 - Confirm auto-dismiss after 60 seconds of inactivity
 - Test recurring reminders
 - Test behavior after app restart and Windows sleep/resume

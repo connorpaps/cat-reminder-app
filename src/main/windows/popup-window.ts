@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from 'electron'
+import { clampWindowToWorkArea } from '../../shared/display-geometry'
 import { loadRenderer, secureWebPreferences } from './window-utils'
 
 const POPUP_WIDTH = 286
@@ -9,16 +10,7 @@ let lastCreatedAt = 0
 
 function popupBounds(): { x: number; y: number; width: number; height: number } {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const { x, y, width, height } = display.workArea
-  // Use the full comfortable height on normal displays, but never place the
-  // popup above the work area on short laptop/remote-desktop displays.
-  const popupHeight = Math.min(POPUP_HEIGHT, Math.max(1, height - 8))
-  return {
-    x: x + width - POPUP_WIDTH - 12,
-    y: y + height - popupHeight - 8,
-    width: POPUP_WIDTH,
-    height: popupHeight
-  }
+  return clampWindowToWorkArea(display.workArea, { width: POPUP_WIDTH, height: POPUP_HEIGHT, margin: 8 })
 }
 
 export function showPopupWindow(): void {

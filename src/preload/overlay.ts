@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('catOverlay', {
     ipcRenderer.on('overlay:show', handler)
     return () => ipcRenderer.removeListener('overlay:show', handler)
   },
-  action: (id: string, action: 'snooze' | 'dismiss' | 'complete') => ipcRenderer.send('overlay:action', id, action),
+  action: (id: string, action: 'snooze' | 'dismiss') => ipcRenderer.send('overlay:action', id, action),
   ready: () => ipcRenderer.send('overlay:ready'),
   setIgnoreMouseEvents: (ignore: boolean) => ipcRenderer.send('overlay:set-ignore-mouse-events', ignore),
   animationComplete: (id: string) => ipcRenderer.send('overlay:animation-complete', id)

@@ -1,5 +1,7 @@
 import { google } from 'googleapis'
+import type { OAuthTokens } from './oauth'
 import { ANYTIME_SENTINEL_START, type Reminder } from '../../../shared/types/reminder'
+import { DISPLAY_ONLY_HIDDEN_STATUS, shouldHideProviderReminder } from '../../../shared/display-only'
 import { ReminderRepository } from '../../storage/reminder-repository'
 
 export type GoogleTaskItem = {
@@ -41,7 +43,7 @@ export function taskToReminder(task: GoogleTaskItem, now = new Date()): Reminder
     description: task.notes,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     priority: 'normal',
-    status: completed ? 'completed' : 'upcoming',
+    status: completed ? DISPLAY_ONLY_HIDDEN_STATUS : 'upcoming',
     enabled: !completed,
     source: 'google-tasks',
     sourceEventId: task.id,
@@ -80,7 +82,10 @@ export class GoogleTasksSyncService {
         .map((item) => [`${item.sourceCalendarId}:${item.sourceEventId}`, item])
     )
 
+    const seenKeys = new Set<string>()
     for (const task of tasks) {
+      const key = `${task.taskListId}:${task.id}`
+      seenKeys.add(key)
       const reminder = taskToReminder(task, now)
       // Timed/all-day tasks are only imported inside the rolling window; time-less
       // ('anytime') tasks always belong to the roll-up.
@@ -90,8 +95,13 @@ export class GoogleTasksSyncService {
       }
       const existing = existingById.get(`${task.taskListId}:${task.id}`)
       this.repository.upsertImported(reminder)
+      if (reminder.status === DISPLAY_ONLY_HIDDEN_STATUS) this.repository.update(reminder.id, { status: DISPLAY_ONLY_HIDDEN_STATUS, enabled: false })
       if (existing) updated += 1
       else imported += 1
+    }
+    for (const [, existing] of existingById) {
+      if (!shouldHideProviderReminder(existing, { provider: 'google-tasks', syncedScopeIds: taskListIds, seenKeys })) continue
+      this.repository.update(existing.id, { status: DISPLAY_ONLY_HIDDEN_STATUS, enabled: false })
     }
 
     return { imported, updated, skipped, syncedAt: now.toISOString() }
@@ -104,9 +114,15 @@ export function createGoogleTasksClient(config: {
   clientId: string
   clientSecret: string
   redirectUri: string
+  onTokens?: (tokens: OAuthTokens) => void
 }): GoogleTasksClient {
   const auth = new google.auth.OAuth2(config.clientId, config.clientSecret, config.redirectUri)
   auth.setCredentials({ access_token: config.accessToken, refresh_token: config.refreshToken })
+  auth.on('tokens', (tokens) => config.onTokens?.({
+    accessToken: tokens.access_token ?? config.accessToken,
+    refreshToken: tokens.refresh_token ?? undefined,
+    expiryDate: tokens.expiry_date ?? undefined
+  }))
   const tasks = google.tasks({ version: 'v1', auth })
 
   return {
@@ -125,8 +141,8 @@ export function createGoogleTasksClient(config: {
         // as time-less tasks. Filtering happens in the sync service instead.
         const response = await tasks.tasks.list({
           tasklist: taskListId,
-          showCompleted: false,
-          showHidden: false,
+          showCompleted: true,
+          showHidden: true,
           maxResults: 100
         })
         for (const task of response.data.items ?? []) {

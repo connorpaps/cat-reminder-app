@@ -29,9 +29,9 @@ describe('google tasks mapping', () => {
     expect(reminder.startAt).toBe('2026-08-02T14:30:00.000Z')
   })
 
-  it('marks completed tasks as disabled and completed', () => {
+  it('hides externally completed tasks without marking them completed locally', () => {
     const reminder = taskToReminder({ id: 't4', taskListId: 'list-1', title: 'Done', due: '2026-08-02T14:30:00.000Z', status: 'completed' }, now)
     expect(reminder.enabled).toBe(false)
-    expect(reminder.status).toBe('completed')
+    expect(reminder.status).toBe('dismissed')
   })
 })

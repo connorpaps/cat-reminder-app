@@ -25,4 +25,4 @@ export type OverlayReminder = {
   soundEnabled?: boolean
 }
 
-export type OverlayAction = 'snooze' | 'dismiss' | 'complete' | 'open'
+export type OverlayAction = 'snooze' | 'dismiss'

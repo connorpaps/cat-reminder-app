@@ -6,6 +6,11 @@ import { google } from 'googleapis'
 export type OAuthConfig = { clientId: string; clientSecret: string; authorizationEndpoint?: string }
 export type OAuthTokens = { accessToken: string; refreshToken?: string; expiryDate?: number }
 
+/** Merge refreshed credentials without losing a refresh token Google omitted. */
+export function mergeGoogleTokens(previous: OAuthTokens | null, next: OAuthTokens): OAuthTokens {
+  return { ...previous, ...next, refreshToken: next.refreshToken ?? previous?.refreshToken }
+}
+
 export const GOOGLE_CALENDAR_READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
 export const GOOGLE_TASKS_READONLY_SCOPE = 'https://www.googleapis.com/auth/tasks.readonly'
 export const GOOGLE_COMBINED_SCOPE = `${GOOGLE_CALENDAR_READONLY_SCOPE} ${GOOGLE_TASKS_READONLY_SCOPE}`

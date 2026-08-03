@@ -1,8 +1,9 @@
 import 'dotenv/config'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createDatabaseBackup, backupDirectoryFor } from './storage/backup'
 import { addMinutes } from 'date-fns'
-import { app, ipcMain, powerMonitor, screen } from 'electron'
+import { app, dialog, ipcMain, powerMonitor, screen, shell } from 'electron'
 import { DAILY_TASKS_ID_PREFIX, TaskRollupScheduler, isDailyTaskRollupId } from './scheduler/task-rollup'
 import { DailyTaskRollupRepository } from './storage/task-rollup-repository'
 import { nextOccurrence } from '../shared/reminders/recurrence'
@@ -15,12 +16,15 @@ import { hideOverlay, markOverlayReady, resetOverlayAfterFailure, setOverlayIgno
 import { createTray, updateTrayIcon } from './tray/tray'
 import { ReminderScheduler } from './scheduler/reminder-scheduler'
 import { logger } from './logging/logger'
-import { complete, dismiss, snooze } from '../shared/reminders/state'
+import { dismiss, snooze } from '../shared/reminders/state'
+import { selectRecentWakeReminders } from '../shared/reminders/wake-reconciliation'
+import { currentTimeZone } from '../shared/timezone'
+import { SnoozeHistoryRepository } from './storage/snooze-history'
 import { validateReminderInput } from '../shared/validation/reminder'
 import { SecureTokenStore } from './storage/secure-token-store'
 import { createGoogleCalendarClient, GoogleCalendarSyncService } from './sync/google/calendar-sync'
 import { createGoogleTasksClient, GoogleTasksSyncService } from './sync/google/tasks-sync'
-import { exchangeGoogleCode, openGoogleAuthorization } from './sync/google/oauth'
+import { exchangeGoogleCode, mergeGoogleTokens, openGoogleAuthorization } from './sync/google/oauth'
 import { TickTickSyncService, createTickTickClient } from './sync/ticktick/ticktick-sync'
 import { exchangeTickTickCode, openTickTickAuthorization, refreshTickTickAccessToken, type TickTickTokens } from './sync/ticktick/oauth'
 import type { CalendarInfo } from '../shared/types/calendar'
@@ -28,6 +32,7 @@ import type { GoogleTaskList } from './sync/google/tasks-sync'
 import type { SyncStatus, TickTickSyncStatus } from '../shared/types/sync'
 import type { TickTickProject, TickTickSyncResult } from '../shared/types/ticktick'
 import { isCreateReminderInput, isPreferencesPatch, isReminderAction, isReminderId, isUpdateReminderInput } from '../shared/validation/runtime'
+import { formatSyncError } from '../shared/sync-errors'
 import type { CreateReminderInput } from '../shared/types/reminder'
 
 // Let the overlay play the reminder chime without requiring a prior user gesture.
@@ -50,6 +55,12 @@ let selectedTicktickProjectIds: string[] = []
 let ticktickLastSyncAt: string | undefined
 let ticktickSyncError: string | undefined
 let rollupRepository: DailyTaskRollupRepository
+let snoozeHistoryRepository: SnoozeHistoryRepository
+let lastSystemTimeZone: string | undefined
+let suspendedAt: Date | undefined
+let syncInProgress = false
+let timeZoneTimer: NodeJS.Timeout | undefined
+const WAKE_RECENT_WINDOW_MINUTES = 10
 let taskRollupScheduler: TaskRollupScheduler
 let rollupTimer: NodeJS.Timeout | undefined
 // True while the daily task roll-up owns the overlay window (walking + idle pause
@@ -97,20 +108,25 @@ function googleClientConfig(tokens: NonNullable<ReturnType<typeof tokenStore.loa
   return { clientId, clientSecret, redirectUri: 'http://127.0.0.1', accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }
 }
 
+function persistGoogleTokens(next: { accessToken: string; refreshToken?: string; expiryDate?: number }): void {
+  const previous = tokenStore.load()
+  tokenStore.save(mergeGoogleTokens(previous, next), 'google')
+}
+
 async function runConfiguredSync(): Promise<void> {
+  if (syncInProgress) return
   const preferences = preferencesRepository.get()
   if (!preferences.syncEnabled) return
-  // TickTick sync is independent of Google (no-op when not connected)
-  await runTickTickSync()
-  const tokens = tokenStore.load()
-  const clientId = process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  if (!tokens || !clientId || !clientSecret) return
+  syncInProgress = true
   try {
-    const config = googleClientConfig(tokens)
-    const calendarClient = createGoogleCalendarClient(config)
+    await runTickTickSync()
+    const tokens = tokenStore.load()
+    const clientId = process.env.GOOGLE_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+    if (!tokens || !clientId || !clientSecret) return
 
-    // Sync calendars
+    const config = googleClientConfig(tokens)
+    const calendarClient = createGoogleCalendarClient({ ...config, onTokens: persistGoogleTokens })
     calendarCache = await calendarClient.listCalendars()
     const calendarSelected = selectedCalendarIds.length
       ? selectedCalendarIds
@@ -120,21 +136,23 @@ async function runConfiguredSync(): Promise<void> {
       selectedCalendarIds = calendarSelected
     }
 
-    // Sync tasks (only if task lists were explicitly selected)
-    const tasksClient = createGoogleTasksClient(config)
+    const tasksClient = createGoogleTasksClient({ ...config, onTokens: persistGoogleTokens })
     taskListCache = await tasksClient.listTaskLists()
     const taskSelected = selectedTaskListIds
-    if (taskSelected.length) {
-      await new GoogleTasksSyncService(reminderRepository, tasksClient).sync(taskSelected)
-    }
+    if (taskSelected.length) await new GoogleTasksSyncService(reminderRepository, tasksClient).sync(taskSelected)
 
     lastSyncAt = new Date().toISOString()
     syncRepository.save({ selectedCalendarIds: calendarSelected, selectedTaskListIds: taskSelected, selectedTicktickProjectIds, lastSuccessAt: lastSyncAt })
     syncError = undefined
     logger.info('Google sync completed', { calendars: calendarSelected.length, taskLists: taskSelected.length })
   } catch (error) {
-    syncError = error instanceof Error ? error.message : 'Google sync failed.'
+    syncError = formatSyncError(error)
     logger.error('Google sync failed', error)
+    if (/invalid_grant|invalid authentication credentials|unauthorized/i.test(syncError)) {
+      tokenStore.clear('google')
+    }
+  } finally {
+    syncInProgress = false
   }
 }
 
@@ -236,16 +254,16 @@ function registerIpc(): void {
     if (!current) return null
     if (action === 'snooze') {
       reminderRepository.clearTriggered(id)
-      return reminderRepository.update(id, snooze(current, preferencesRepository.get().snoozeMinutes))
+      const minutes = preferencesRepository.get().snoozeMinutes
+      snoozeHistoryRepository.record(current.id, current.occurrenceKey, new Date(), minutes)
+      return reminderRepository.update(id, snooze(current, minutes))
     }
     if (action === 'dismiss') {
       const updated = reminderRepository.update(id, dismiss(current))
       applyRecurringAdvance(current)
       return updated
     }
-    const updated = reminderRepository.update(id, complete(current))
-    applyRecurringAdvance(current)
-    return updated
+    return reminderRepository.update(id, dismiss(current))
   })
   ipcMain.handle('ticktick:status', () => ticktickStatus())
   ipcMain.handle('ticktick:connect', async () => {
@@ -311,15 +329,16 @@ function registerIpc(): void {
     const authorization = await openGoogleAuthorization({ clientId, clientSecret })
     const tokens = await exchangeGoogleCode({ clientId, clientSecret, code: authorization.code, redirectUri: authorization.redirectUri })
     tokenStore.save(tokens)
+    preferencesRepository.update({ syncEnabled: true })
     const config = googleClientConfig(tokens)
 
     // Fetch calendars
-    const calendarClient = createGoogleCalendarClient(config)
+    const calendarClient = createGoogleCalendarClient({ ...config, onTokens: persistGoogleTokens })
     calendarCache = await calendarClient.listCalendars()
     selectedCalendarIds = calendarCache.filter((calendar) => calendar.primary).map((calendar) => calendar.id)
 
     // Fetch task lists
-    const tasksClient = createGoogleTasksClient(config)
+    const tasksClient = createGoogleTasksClient({ ...config, onTokens: persistGoogleTokens })
     taskListCache = await tasksClient.listTaskLists()
     selectedTaskListIds = taskListCache.map((list) => list.id)
 
@@ -352,7 +371,7 @@ function registerIpc(): void {
     const config = googleClientConfig(tokens)
     try {
       // Refresh calendars
-      const calendarClient = createGoogleCalendarClient(config)
+      const calendarClient = createGoogleCalendarClient({ ...config, onTokens: persistGoogleTokens })
       calendarCache = await calendarClient.listCalendars()
       const calendarSelected = selectedCalendarIds.length
         ? selectedCalendarIds
@@ -362,7 +381,7 @@ function registerIpc(): void {
         : { imported: 0, updated: 0, skipped: 0, syncedAt: new Date().toISOString() }
 
       // Refresh tasks (only if task lists were explicitly selected)
-      const tasksClient = createGoogleTasksClient(config)
+      const tasksClient = createGoogleTasksClient({ ...config, onTokens: persistGoogleTokens })
       taskListCache = await tasksClient.listTaskLists()
       const taskSelected = selectedTaskListIds
       const tasksResult = taskSelected.length
@@ -383,7 +402,10 @@ function registerIpc(): void {
         calendars: calendarCache
       }
     } catch (error) {
-      syncError = error instanceof Error ? error.message : 'Google sync failed.'
+      syncError = formatSyncError(error)
+      if (/invalid_grant|invalid authentication credentials|unauthorized/i.test(syncError)) {
+        tokenStore.clear('google')
+      }
       throw new Error(syncError)
     }
   })
@@ -456,7 +478,10 @@ function registerIpc(): void {
       rollupShowing = false
       const date = id.slice(DAILY_TASKS_ID_PREFIX.length)
       if (action === 'snooze') {
-        rollupRepository.markSnoozed(date, addMinutes(new Date(), preferencesRepository.get().snoozeMinutes).toISOString())
+        const minutes = preferencesRepository.get().snoozeMinutes
+        const snoozedAt = new Date()
+        snoozeHistoryRepository.recordDailyTask(date, snoozedAt, minutes)
+        rollupRepository.markSnoozed(date, addMinutes(snoozedAt, minutes).toISOString())
       } else {
         rollupRepository.markDismissed(date)
       }
@@ -473,10 +498,11 @@ function registerIpc(): void {
     if (!current) return
     if (action === 'snooze') {
       reminderRepository.clearTriggered(id)
-      reminderRepository.update(id, snooze(current, preferencesRepository.get().snoozeMinutes))
+      const minutes = preferencesRepository.get().snoozeMinutes
+      snoozeHistoryRepository.record(current.id, current.occurrenceKey, new Date(), minutes)
+      reminderRepository.update(id, snooze(current, minutes))
     }
     if (action === 'dismiss') { reminderRepository.update(id, dismiss(current)); applyRecurringAdvance(current) }
-    if (action === 'complete') { reminderRepository.update(id, complete(current)); applyRecurringAdvance(current) }
     hideOverlay()
     scheduler.completeActive()
   })
@@ -484,9 +510,16 @@ function registerIpc(): void {
 
 async function boot(): Promise<void> {
   if (process.platform === 'win32') app.setAppUserModelId('com.catreminder.desktop')
-  const db = createDatabase()
+  const dbPath = join(app.getPath('userData'), 'cat-reminder.sqlite')
+  try {
+    createDatabaseBackup(dbPath, backupDirectoryFor(dbPath))
+  } catch (error) {
+    logger.warn('Database backup could not be created', error)
+  }
+  const db = createDatabase(dbPath)
   reminderRepository = new ReminderRepository(db)
   preferencesRepository = new PreferencesRepository(db)
+  snoozeHistoryRepository = new SnoozeHistoryRepository(db)
   tokenStore = new SecureTokenStore()
   syncRepository = new SyncRepository(db)
   const syncMetadata = syncRepository.get()
@@ -499,6 +532,7 @@ async function boot(): Promise<void> {
 
   // Set default sync interval to 5 minutes if not already configured
   const prefs = preferencesRepository.get()
+  lastSystemTimeZone = currentTimeZone()
   if (prefs.syncIntervalMinutes === 30) {
     preferencesRepository.update({ syncIntervalMinutes: 5 })
   }
@@ -565,32 +599,75 @@ async function boot(): Promise<void> {
   // Auto-sync timer: check every 60s if sync interval has elapsed
   syncTimer = setInterval(() => {
     const intervalMs = preferencesRepository.get().syncIntervalMinutes * 60_000
-    if (!lastSyncAt || Date.now() - new Date(lastSyncAt).getTime() >= intervalMs) {
-      void runConfiguredSync()
-    }
+    const googleDue = Boolean(tokenStore.load() && (!lastSyncAt || Date.now() - new Date(lastSyncAt).getTime() >= intervalMs))
+    const ticktickDue = Boolean(tokenStore.load('ticktick') && (!ticktickLastSyncAt || Date.now() - new Date(ticktickLastSyncAt).getTime() >= intervalMs))
+    if (googleDue || ticktickDue) void runConfiguredSync()
   }, 60_000)
   void runConfiguredSync()
 
-  powerMonitor.on('resume', () => { logger.info('System resumed'); reconcileRecurringReminders(); scheduler.reconcile() })
-  powerMonitor.on('suspend', () => logger.info('System suspended'))
+  powerMonitor.on('resume', () => {
+    const wakeAt = new Date()
+    const sleptMs = suspendedAt ? Math.max(0, wakeAt.getTime() - suspendedAt.getTime()) : 0
+    logger.info('System resumed', { sleptMs })
+    reconcileRecurringReminders(wakeAt)
+    const recent = selectRecentWakeReminders(reminderRepository.dueCandidates(wakeAt, preferencesRepository.get().reminderLeadTimeMinutes), wakeAt, WAKE_RECENT_WINDOW_MINUTES)
+    if (recent.length) {
+      scheduler.reconcile(wakeAt, recent[0].id, true)
+    } else {
+      scheduler.reconcile(wakeAt, undefined, true)
+    }
+    taskRollupScheduler?.check(wakeAt)
+    suspendedAt = undefined
+  })
+  powerMonitor.on('suspend', () => {
+    suspendedAt = new Date()
+    logger.info('System suspended')
+  })
   screen.on('display-added', () => { logger.info('Display added'); hideOverlay() })
   screen.on('display-removed', () => { logger.info('Display removed'); hideOverlay() })
   screen.on('display-metrics-changed', (_event, _display, _changedMetrics) => { logger.info('Display metrics changed'); hideOverlay() })
+  timeZoneTimer = setInterval(() => {
+    const timeZone = currentTimeZone()
+    if (timeZone !== lastSystemTimeZone) {
+      logger.info('System timezone changed', { from: lastSystemTimeZone, to: timeZone })
+      lastSystemTimeZone = timeZone
+      reconcileRecurringReminders()
+      scheduler.reconcile()
+      taskRollupScheduler.check()
+    }
+  }, 60_000)
   logger.info('Cat Reminder started')
   const tokens = tokenStore.load()
-  if (!tokens) showPopupWindow()
+  if (!tokens && !tokenStore.load('ticktick')) showPopupWindow()
+
 }
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => showPopupWindow())
-  app.whenReady().then(boot).catch((error) => logger.error('Startup failed', error))
+  app.whenReady().then(boot).catch(async (error) => {
+    logger.error('Startup failed', error)
+    const backupDirectory = backupDirectoryFor(join(app.getPath('userData'), 'cat-reminder.sqlite'))
+    const result = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Cat Reminder could not start',
+      message: 'Your local reminder database could not be opened.',
+      detail: 'Your existing data was not deleted. Open the backups folder to copy back a recent backup, then start Cat Reminder again.',
+      buttons: ['Open backups folder', 'Quit'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    })
+    if (result.response === 0) await shell.openPath(backupDirectory)
+    app.quit()
+  })
 }
 app.on('window-all-closed', () => { logger.info('All windows closed; keeping Cat Reminder in the tray') })
 app.on('before-quit', () => {
   scheduler?.stop()
   if (syncTimer) clearInterval(syncTimer)
   if (rollupTimer) clearInterval(rollupTimer)
+  if (timeZoneTimer) clearInterval(timeZoneTimer)
   logger.info('Cat Reminder shutting down')
 })

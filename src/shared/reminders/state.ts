@@ -18,10 +18,6 @@ export function snooze(reminder: Reminder, minutes: number, now = new Date()): R
   return { ...reminder, status: 'snoozed', snoozeUntil: addMinutes(now, minutes).toISOString(), updatedAt: now.toISOString() }
 }
 
-export function complete(reminder: Reminder, now = new Date()): Reminder {
-  return { ...reminder, status: 'completed', snoozeUntil: undefined, updatedAt: now.toISOString() }
-}
-
 export function dismiss(reminder: Reminder, now = new Date()): Reminder {
   return { ...reminder, status: 'dismissed', snoozeUntil: undefined, updatedAt: now.toISOString() }
 }

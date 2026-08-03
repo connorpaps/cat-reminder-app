@@ -1,4 +1,5 @@
 import { ANYTIME_SENTINEL_START, type Reminder, type ReminderPriority } from '../../../shared/types/reminder'
+import { DISPLAY_ONLY_HIDDEN_STATUS, shouldHideProviderReminder } from '../../../shared/display-only'
 import type { TickTickProject, TickTickSyncResult, TickTickTask } from '../../../shared/types/ticktick'
 import { ReminderRepository } from '../../storage/reminder-repository'
 import { TICKTICK_API_BASE } from './oauth'
@@ -20,7 +21,7 @@ function tickTickPriority(priority?: number): ReminderPriority {
 /**
  * Maps a TickTick task onto our kinded reminder model (display-only; nothing is
  * ever written back to TickTick):
- * - `status 2` (completed) → completed reminder.
+ *      - `status 2` (completed upstream) → locally hidden reminder; Cat Reminder never completes it.
  * - no `dueDate` → `anytime` (feeds the daily task roll-up every day until done).
  * - `isAllDay` or a date-only `dueDate` → `all-day` anchored to local midnight.
  * - otherwise → `timed` (fires the cat overlay at our lead time).
@@ -32,7 +33,7 @@ export function taskToReminder(task: TickTickTask, now = new Date()): Reminder {
     description: task.desc || task.content,
     timezone: task.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone,
     priority: tickTickPriority(task.priority),
-    status: task.status === 2 ? 'completed' : 'upcoming',
+    status: task.status === 2 ? DISPLAY_ONLY_HIDDEN_STATUS : 'upcoming',
     enabled: task.status !== 2,
     source: 'ticktick',
     sourceEventId: task.id,
@@ -63,9 +64,10 @@ export class TickTickSyncService {
 
   async sync(projectIds: string[], now = new Date()): Promise<TickTickSyncResult> {
     const projectTasks = await this.client.listTasks(projectIds)
+    const successfullySyncedProjectIds = projectTasks.map(({ projectId }) => projectId)
     let imported = 0
     let updated = 0
-    const activeTaskIds = new Set<string>()
+    const activeTaskKeys = new Set<string>()
     const existingById = new Map(
       this.repository.list()
         .filter((item) => item.source === 'ticktick')
@@ -74,7 +76,7 @@ export class TickTickSyncService {
 
     for (const { projectId, tasks } of projectTasks) {
       for (const task of tasks) {
-        activeTaskIds.add(task.id)
+        activeTaskKeys.add(`${projectId}:${task.id}`)
         const reminder = taskToReminder(task, now)
         if (reminder.kind === 'timed' && new Date(reminder.startAt).getTime() > now.getTime() + IMPORT_WINDOW_MS) continue
         const existing = existingById.get(`${projectId}:${task.id}`)
@@ -82,8 +84,8 @@ export class TickTickSyncService {
         // The upsert never touches status/enabled, so a task completed in TickTick
         // but still present in the response must be completed locally (the pruning
         // loop below covers the case where it has already disappeared).
-        if (reminder.status === 'completed') {
-          this.repository.update(reminder.id, { status: 'completed', enabled: false })
+        if (reminder.status === DISPLAY_ONLY_HIDDEN_STATUS) {
+          this.repository.update(reminder.id, { status: DISPLAY_ONLY_HIDDEN_STATUS, enabled: false })
         }
         if (existing) updated += 1
         else imported += 1
@@ -91,21 +93,21 @@ export class TickTickSyncService {
     }
 
     // Tasks that were active last sync but no longer appear were completed or
-    // deleted in TickTick → mark them completed locally so they leave the cat
+    // deleted in TickTick → hide them locally so they leave the cat display
     // overlay and the daily roll-up. Only reminders inside the synced projects
     // are touched (a deselected project must keep its reminders as-is).
-    let completed = 0
+    let hidden = 0
     const syncedProjectIds = new Set(projectIds)
     for (const reminder of this.repository.list()) {
       if (reminder.source !== 'ticktick') continue
       if (!reminder.sourceCalendarId || !syncedProjectIds.has(reminder.sourceCalendarId)) continue
       if (reminder.status === 'completed' || reminder.status === 'dismissed') continue
-      if (reminder.sourceEventId && activeTaskIds.has(reminder.sourceEventId)) continue
-      this.repository.update(reminder.id, { status: 'completed' })
-      completed += 1
+      if (!shouldHideProviderReminder(reminder, { provider: 'ticktick', syncedScopeIds: successfullySyncedProjectIds, seenKeys: activeTaskKeys })) continue
+      this.repository.update(reminder.id, { status: DISPLAY_ONLY_HIDDEN_STATUS, enabled: false })
+      hidden += 1
     }
 
-    return { imported, updated, completed, syncedAt: now.toISOString() }
+    return { imported, updated, hidden, syncedAt: now.toISOString() }
   }
 }
 
