@@ -7,14 +7,15 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { decodePng, cropRows, sampleOpaque, writePng } from './png-lib.mjs'
+import { flipStripFrames } from './sprite-utils.mjs'
 
 const SOURCE_DIR = join('public', 'assets', 'cats', 'default')
 const OUT_DIR = join('public', 'assets', 'cats')
 
 const cats = [
-  // The black atlas is horizontally mirrored relative to the other cats (its
-  // idle faces right / running faces left), so flip it to match the convention
-  // (idle faces left, running faces right) used by the overlay code.
+  // The black atlas's idle row already matches the icon orientation. Its
+  // running row is reversed relative to the other cats and is flipped per frame
+  // below so the walk faces forward without reversing animation order.
   { file: 'AllCatsBlack.png', id: 'black', displayName: 'Black Cat', flipX: true },
   { file: 'AllCatsGrey.png', id: 'grey', displayName: 'Grey Cat' },
   { file: 'AllCatsGreyWhite.png', id: 'grey-white', displayName: 'Grey & White Cat' },
@@ -35,21 +36,10 @@ for (const cat of cats) {
   const idle = cropRows(image, 0, IDLE_ROW_Y, STRIP_W, STRIP_H)
   const running = cropRows(image, 0, RUNNING_ROW_Y, STRIP_W, STRIP_H)
   if (cat.flipX) {
-    const flip = (strip) => ({
-      width: strip.width,
-      height: strip.height,
-      rows: strip.rows.map((row) => {
-        const copy = Buffer.from(row)
-        for (let x = 0; x < strip.width; x += 1) {
-          const src = x * 4
-          const dst = (strip.width - 1 - x) * 4
-          copy[dst] = row[src]; copy[dst + 1] = row[src + 1]; copy[dst + 2] = row[src + 2]; copy[dst + 3] = row[src + 3]
-        }
-        return copy
-      })
-    })
-    idle.rows = flip(idle).rows
-    running.rows = flip(running).rows
+    // The black idle atlas already has the same icon orientation as the other
+    // cats, so only mirror its walking frames. Mirroring the whole strip would
+    // reverse the animation; per-frame mirroring preserves the phase order.
+    running.rows = flipStripFrames(running, 64).rows
   }
   const dir = join(OUT_DIR, cat.id)
   mkdirSync(dir, { recursive: true })

@@ -1,16 +1,24 @@
 import { BrowserWindow, screen } from 'electron'
 import { loadRenderer, secureWebPreferences } from './window-utils'
 
-const POPUP_WIDTH = 274
-const POPUP_HEIGHT = 500
+const POPUP_WIDTH = 286
+const POPUP_HEIGHT = 620
 
 let popup: BrowserWindow | undefined
 let lastCreatedAt = 0
 
-function taskbarAnchor(): { x: number; y: number } {
+function popupBounds(): { x: number; y: number; width: number; height: number } {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const { x, y, width, height } = display.workArea
-  return { x: x + width - POPUP_WIDTH - 12, y: y + height - POPUP_HEIGHT - 8 }
+  // Use the full comfortable height on normal displays, but never place the
+  // popup above the work area on short laptop/remote-desktop displays.
+  const popupHeight = Math.min(POPUP_HEIGHT, Math.max(1, height - 8))
+  return {
+    x: x + width - POPUP_WIDTH - 12,
+    y: y + height - popupHeight - 8,
+    width: POPUP_WIDTH,
+    height: popupHeight
+  }
 }
 
 export function showPopupWindow(): void {
@@ -21,18 +29,17 @@ export function showPopupWindow(): void {
       popup.hide()
       return
     }
-    const anchor = taskbarAnchor()
-    popup.setBounds({ ...anchor, width: POPUP_WIDTH, height: POPUP_HEIGHT })
+    popup.setBounds(popupBounds())
     popup.showInactive()
     return
   }
 
-  const anchor = taskbarAnchor()
+  const bounds = popupBounds()
   popup = new BrowserWindow({
-    x: anchor.x,
-    y: anchor.y,
-    width: POPUP_WIDTH,
-    height: POPUP_HEIGHT,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     show: false,
     frame: false,
     hasShadow: false,

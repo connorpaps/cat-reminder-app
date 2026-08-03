@@ -22,6 +22,8 @@ export function PopupApp() {
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [tickticking, setTickticking] = useState(false)
+  const [googleAccountOpen, setGoogleAccountOpen] = useState(true)
+  const [ticktickAccountOpen, setTicktickAccountOpen] = useState(true)
   const [assetBase, setAssetBase] = useState<string | undefined>(undefined)
 
   const refresh = async () => {
@@ -34,6 +36,10 @@ export function PopupApp() {
     setPreferences(nextPreferences)
     setSync(nextSync)
     setTicktick(nextTicktick)
+    // Connected account sections start compact, but subsequent refreshes must
+    // not override the user's current open/closed choice.
+    if (nextSync.connected) setGoogleAccountOpen((open) => sync === null ? false : open)
+    if (nextTicktick.connected) setTicktickAccountOpen((open) => ticktick === null ? false : open)
     setAssetBase(baseUrl)
   }
 
@@ -136,21 +142,23 @@ export function PopupApp() {
         <hr className="popup-divider" />
 
         {/* Google Account (Calendar + Tasks) */}
-        <div className="popup-section">
-          <span className="popup-label">🔗 Google Account</span>
+        <details
+          className="popup-section popup-account"
+          open={googleAccountOpen}
+          onToggle={(event) => setGoogleAccountOpen(event.currentTarget.open)}
+        >
+          <summary className="popup-summary">
+            <span className="popup-label">🔗 Google Account</span>
+            {sync?.connected && (
+              <span className="popup-summary-status"><span className="popup-dot on" /> Connected{sync.lastSyncAt && ` · Synced ${timeAgo(sync.lastSyncAt)}`}</span>
+            )}
+          </summary>
           {!sync?.connected ? (
             <button className="popup-btn popup-btn-primary" onClick={() => void connectAccount()}>
               Connect Account
             </button>
           ) : (
             <>
-              <div className="popup-status">
-                <span className="popup-dot on" />
-                Connected
-                {sync.lastSyncAt && (
-                  <small className="popup-sync-age"> · Synced {timeAgo(sync.lastSyncAt)}</small>
-                )}
-              </div>
               {sync.calendars.length > 0 && (
                 <div className="popup-calendar-list">
                   {sync.calendars.map((cal) => (
@@ -180,26 +188,28 @@ export function PopupApp() {
               </div>
             </>
           )}
-        </div>
+        </details>
 
         <hr className="popup-divider" />
 
         {/* TickTick Account (display-only) */}
-        <div className="popup-section">
-          <span className="popup-label">✅ TickTick Account</span>
+        <details
+          className="popup-section popup-account"
+          open={ticktickAccountOpen}
+          onToggle={(event) => setTicktickAccountOpen(event.currentTarget.open)}
+        >
+          <summary className="popup-summary">
+            <span className="popup-label">✅ TickTick Account</span>
+            {ticktick?.connected && (
+              <span className="popup-summary-status"><span className="popup-dot on" /> Connected{ticktick.lastSyncAt && ` · Synced ${timeAgo(ticktick.lastSyncAt)}`}</span>
+            )}
+          </summary>
           {!ticktick?.connected ? (
             <button className="popup-btn popup-btn-primary" onClick={() => void connectTickTick()}>
               Connect TickTick
             </button>
           ) : (
             <>
-              <div className="popup-status">
-                <span className="popup-dot on" />
-                Connected
-                {ticktick.lastSyncAt && (
-                  <small className="popup-sync-age"> · Synced {timeAgo(ticktick.lastSyncAt)}</small>
-                )}
-              </div>
               <small className="popup-note">Display-only: tasks show as cat reminders; changes happen in TickTick.</small>
               {ticktick.projects.length > 0 && (
                 <div className="popup-calendar-list">
@@ -230,7 +240,7 @@ export function PopupApp() {
               </div>
             </>
           )}
-        </div>
+        </details>
 
         <hr className="popup-divider" />
 
@@ -250,7 +260,12 @@ export function PopupApp() {
                     title={CATS[catId].displayName}
                     onClick={() => void updatePreference('selectedCatId', catId)}
                   >
-                    <img src={assetUrl(`assets/cats/${catId}/idle.png`, assetBase)} alt={CATS[catId].displayName} draggable={false} />
+                    <span
+                      className="cat-picker-sprite"
+                      aria-hidden="true"
+                      style={{ backgroundImage: `url(${assetUrl(`assets/cats/${catId}/idle.png`, assetBase)})` }}
+                    />
+                    <span className="sr-only">{CATS[catId].displayName}</span>
                   </button>
                 )
               })}
