@@ -374,3 +374,47 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - src/renderer/popup/PopupApp.tsx
   - src/renderer/styles.css
   - tests/shared/sprite-utils.test.ts
+
+## 2026-08-03 02:12 — `78ebb04`
+**Complete reliability and release-readiness plan**
+
+  - handoff.md
+  - knowledge.md
+  - spec_steps.md
+  - src/main/index.ts
+  - src/main/scheduler/reminder-scheduler.ts
+  - src/main/storage/backup.ts
+  - src/main/storage/database.ts
+  - src/main/storage/snooze-history.ts
+  - src/main/sync/google/calendar-sync.ts
+  - src/main/sync/google/oauth.ts
+  - src/main/sync/google/tasks-sync.ts
+  - src/main/sync/ticktick/ticktick-sync.ts
+  - src/main/windows/popup-window.ts
+  - src/preload/overlay.ts
+  - src/renderer/overlay/OverlayApp.tsx
+  - src/renderer/popup/PopupApp.tsx
+  - src/renderer/styles.css
+  - src/shared/display-geometry.ts
+  - src/shared/display-only.ts
+  - src/shared/ipc.ts
+  - src/shared/reminders/state.ts
+  - src/shared/reminders/wake-reconciliation.ts
+  - src/shared/sync-errors.ts
+  - src/shared/timezone.ts
+  - src/shared/types/overlay.ts
+  - src/shared/types/ticktick.ts
+  - src/shared/validation/runtime.ts
+  - tests/shared/backup.test.ts
+  - tests/shared/display-geometry.test.ts
+  - tests/shared/display-only.test.ts
+  - tests/shared/google-oauth.test.ts
+  - tests/shared/migrations.test.ts
+  - tests/shared/preferences.test.ts
+  - tests/shared/provider-disappearance.test.ts
+  - tests/shared/reminders.test.ts
+  - tests/shared/snooze-history.test.ts
+  - tests/shared/sync-errors.test.ts
+  - tests/shared/tasks-sync.test.ts
+  - tests/shared/ticktick-sync.test.ts
+  - tests/shared/wake-reconciliation.test.ts
