@@ -225,3 +225,36 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
 **Session wrap-up: document final memory-system validation in handoff**
 
   - handoff.md
+
+## 2026-08-02 21:00 — `b0c6767`
+**Add daily task roll-up for time-less reminders; overlay walk fixes**
+
+  - handoff.md
+  - knowledge.md
+  - public/assets/cats/default/manifest.json
+  - src/main/index.ts
+  - src/main/scheduler/reminder-scheduler.ts
+  - src/main/scheduler/task-rollup.ts
+  - src/main/storage/database.ts
+  - src/main/storage/reminder-repository.ts
+  - src/main/storage/task-rollup-repository.ts
+  - src/main/sync/google/calendar-sync.ts
+  - src/main/sync/google/tasks-sync.ts
+  - src/main/windows/overlay-window.ts
+  - src/renderer/overlay/OverlayApp.tsx
+  - src/renderer/popup/PopupApp.tsx
+  - src/renderer/styles.css
+  - src/shared/animation.ts
+  - src/shared/reminders/state.ts
+  - src/shared/types/overlay.ts
+  - src/shared/types/preferences.ts
+  - src/shared/types/reminder.ts
+  - src/shared/validation/reminder.ts
+  - src/shared/validation/runtime.ts
+  - tests/shared/animation.test.ts
+  - tests/shared/queue.test.ts
+  - tests/shared/reminders.test.ts
+  - tests/shared/runtime-validation.test.ts
+  - tests/shared/task-rollup.test.ts
+  - tests/shared/tasks-sync.test.ts
+  - tests/shared/validation.test.ts
