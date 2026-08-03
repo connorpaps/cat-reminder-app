@@ -317,3 +317,48 @@ Raw per-save events (if the watcher is running) go to `docs/activity-watch.log` 
   - src/shared/ipc.ts
   - src/shared/types/overlay.ts
   - tests/shared/animation.test.ts
+
+## 2026-08-02 23:27 — `75471bc`
+**Add 5 extra cats with picker, settings polish, and reminder chime**
+
+  - electron.vite.config.ts
+  - handoff.md
+  - knowledge.md
+  - public/assets/cats/black/idle.png
+  - public/assets/cats/black/manifest.json
+  - public/assets/cats/black/running.png
+  - public/assets/cats/default/AllCatsBlack.png
+  - public/assets/cats/default/AllCatsGrey.png
+  - public/assets/cats/default/AllCatsGreyWhite.png
+  - public/assets/cats/default/AllCatsOrange.png
+  - public/assets/cats/default/AllCatsWhite.png
+  - public/assets/cats/grey-white/idle.png
+  - public/assets/cats/grey-white/manifest.json
+  - public/assets/cats/grey-white/running.png
+  - public/assets/cats/grey/idle.png
+  - public/assets/cats/grey/manifest.json
+  - public/assets/cats/grey/running.png
+  - public/assets/cats/orange/idle.png
+  - public/assets/cats/orange/manifest.json
+  - public/assets/cats/orange/running.png
+  - public/assets/cats/white/idle.png
+  - public/assets/cats/white/manifest.json
+  - public/assets/cats/white/running.png
+  - public/assets/sounds/chime.wav
+  - scripts/extract-cats.mjs
+  - scripts/gen-sound.mjs
+  - scripts/png-lib.mjs
+  - scripts/png-sheet-info.mjs
+  - src/main/index.ts
+  - src/main/tray/tray.ts
+  - src/preload/index.ts
+  - src/renderer/overlay/OverlayApp.tsx
+  - src/renderer/popup/PopupApp.tsx
+  - src/renderer/styles.css
+  - src/shared/animation.ts
+  - src/shared/assets.ts
+  - src/shared/ipc.ts
+  - src/shared/types/overlay.ts
+  - src/shared/types/preferences.ts
+  - src/shared/validation/runtime.ts
+  - tests/shared/animation.test.ts
