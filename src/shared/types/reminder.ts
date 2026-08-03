@@ -16,7 +16,7 @@ export type ReminderStatus =
   | 'completed'
   | 'dismissed'
 
-export type ReminderSource = 'manual' | 'google-calendar' | 'google-tasks' | 'imported'
+export type ReminderSource = 'manual' | 'google-calendar' | 'google-tasks' | 'ticktick' | 'imported'
 
 export type RecurrenceRule =
   | { frequency: 'daily'; interval?: number }

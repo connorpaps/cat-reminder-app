@@ -1,7 +1,8 @@
 import type { CreateReminderInput, Reminder, UpdateReminderInput } from './types/reminder'
 import type { Preferences } from './types/preferences'
 import type { OverlayAction, OverlayReminder } from './types/overlay'
-import type { SyncConnectResult, SyncRefreshResult, SyncStatus } from './types/sync'
+import type { SyncConnectResult, SyncRefreshResult, SyncStatus, TickTickSyncStatus } from './types/sync'
+import type { TickTickSyncResult } from './types/ticktick'
 
 export type ReminderApi = {
   list: () => Promise<Reminder[]>
@@ -24,6 +25,14 @@ export type SyncApi = {
   disconnect: () => Promise<SyncStatus>
 }
 
+export type TickTickApi = {
+  status: () => Promise<TickTickSyncStatus>
+  connect: () => Promise<TickTickSyncStatus>
+  selectProjects: (projectIds: string[]) => Promise<TickTickSyncStatus>
+  refresh: () => Promise<TickTickSyncResult>
+  disconnect: () => Promise<TickTickSyncStatus>
+}
+
 export type AppApi = {
   openSettings: () => Promise<void>
   showTestOverlay: () => Promise<void>
@@ -34,6 +43,7 @@ export type CatReminderApi = {
   reminders: ReminderApi
   preferences: PreferencesApi
   sync: SyncApi
+  ticktick: TickTickApi
   app: AppApi
 }
 

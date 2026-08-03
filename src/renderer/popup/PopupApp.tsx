@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SyncStatus } from '../../shared/types/sync'
+import type { SyncStatus, TickTickSyncStatus } from '../../shared/types/sync'
 import type { Preferences } from '../../shared/types/preferences'
 
 function timeAgo(iso: string | undefined): string {
@@ -15,17 +15,21 @@ function timeAgo(iso: string | undefined): string {
 export function PopupApp() {
   const [preferences, setPreferences] = useState<Preferences | null>(null)
   const [sync, setSync] = useState<SyncStatus | null>(null)
+  const [ticktick, setTicktick] = useState<TickTickSyncStatus | null>(null)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [syncing, setSyncing] = useState(false)
+  const [tickticking, setTickticking] = useState(false)
 
   const refresh = async () => {
-    const [nextPreferences, nextSync] = await Promise.all([
+    const [nextPreferences, nextSync, nextTicktick] = await Promise.all([
       window.catReminder.preferences.get(),
-      window.catReminder.sync.status()
+      window.catReminder.sync.status(),
+      window.catReminder.ticktick.status()
     ])
     setPreferences(nextPreferences)
     setSync(nextSync)
+    setTicktick(nextTicktick)
   }
 
   useEffect(() => {
@@ -75,6 +79,41 @@ export function PopupApp() {
   async function selectCalendars(calendarIds: string[]) {
     const status = await window.catReminder.sync.selectCalendars(calendarIds)
     setSync(status)
+  }
+
+  async function connectTickTick() {
+    setError('')
+    try {
+      const status = await window.catReminder.ticktick.connect()
+      setTicktick(status)
+      setNotice('TickTick connected. Syncing now…')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'TickTick connection failed.')
+    }
+  }
+
+  async function syncTickTickNow() {
+    setTickticking(true)
+    setError('')
+    try {
+      const result = await window.catReminder.ticktick.refresh()
+      setTicktick((prev) => prev ? { ...prev, lastSyncAt: result.syncedAt } : prev)
+      setNotice(`TickTick synced ${result.imported + result.updated} items.`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'TickTick sync failed.')
+    } finally {
+      setTickticking(false)
+    }
+  }
+
+  async function disconnectTickTick() {
+    const status = await window.catReminder.ticktick.disconnect()
+    setTicktick(status)
+  }
+
+  async function selectProjects(projectIds: string[]) {
+    const status = await window.catReminder.ticktick.selectProjects(projectIds)
+    setTicktick(status)
   }
 
   return (
@@ -130,6 +169,56 @@ export function PopupApp() {
                   {syncing ? 'Syncing…' : 'Sync now'}
                 </button>
                 <button className="popup-btn popup-btn-text" onClick={() => void disconnectAccount()}>
+                  Disconnect
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <hr className="popup-divider" />
+
+        {/* TickTick Account (display-only) */}
+        <div className="popup-section">
+          <span className="popup-label">✅ TickTick Account</span>
+          {!ticktick?.connected ? (
+            <button className="popup-btn popup-btn-primary" onClick={() => void connectTickTick()}>
+              Connect TickTick
+            </button>
+          ) : (
+            <>
+              <div className="popup-status">
+                <span className="popup-dot on" />
+                Connected
+                {ticktick.lastSyncAt && (
+                  <small className="popup-sync-age"> · Synced {timeAgo(ticktick.lastSyncAt)}</small>
+                )}
+              </div>
+              <small className="popup-note">Display-only: tasks show as cat reminders; changes happen in TickTick.</small>
+              {ticktick.projects.length > 0 && (
+                <div className="popup-calendar-list">
+                  {ticktick.projects.map((project) => (
+                    <label className="popup-calendar-item" key={project.id}>
+                      <input
+                        type="checkbox"
+                        checked={ticktick.selectedProjectIds.includes(project.id)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...ticktick.selectedProjectIds, project.id]
+                            : ticktick.selectedProjectIds.filter((id) => id !== project.id)
+                          void selectProjects(next)
+                        }}
+                      />
+                      <span>{project.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="popup-row">
+                <button className="popup-btn popup-btn-ghost" onClick={() => void syncTickTickNow()} disabled={tickticking}>
+                  {tickticking ? 'Syncing…' : 'Sync now'}
+                </button>
+                <button className="popup-btn popup-btn-text" onClick={() => void disconnectTickTick()}>
                   Disconnect
                 </button>
               </div>

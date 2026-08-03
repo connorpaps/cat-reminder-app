@@ -140,6 +140,7 @@ export class ReminderRepository {
       ON CONFLICT(source, source_event_id) DO UPDATE SET
         title=excluded.title,
         description=excluded.description,
+        kind=excluded.kind,
         start_at=excluded.start_at,
         end_at=excluded.end_at,
         timezone=excluded.timezone,

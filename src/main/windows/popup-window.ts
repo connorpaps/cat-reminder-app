@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import { loadRenderer, secureWebPreferences } from './window-utils'
 
 const POPUP_WIDTH = 274
-const POPUP_HEIGHT = 416
+const POPUP_HEIGHT = 500
 
 let popup: BrowserWindow | undefined
 let lastCreatedAt = 0

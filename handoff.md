@@ -13,6 +13,47 @@ The app is an Electron + React + TypeScript desktop reminder application. SQLite
 
 **Single-instance lock is active.** Running `pnpm dev` twice or double-clicking the executable will focus the existing instance instead of spawning a duplicate tray icon.
 
+## Work completed this session (August 2, 2026) — TickTick integration
+
+### 22. TickTick Open API integration (display-only sidekick)
+
+Approved plan: direct official TickTick Open API (NOT the Google Calendar bridge — research showed it only syncs tasks *with time attributes*, so date-less tasks would never reach the app and the daily roll-up would starve). Display-only: the app never writes to TickTick; scope is `tasks:read` only. Research sources: developer.ticktick.com OpenAPI spec (mirrored at mrzmyr/ticktick-openapi), TickTick help article on the Google Calendar integration, ticktick-py/openclaw/openapi-cli community docs.
+
+- **OAuth** (`src/main/sync/ticktick/oauth.ts`): authorization-code flow at `ticktick.com/oauth/authorize` + `/oauth/token`, scopes `tasks:read tasks:write` (BOTH requested — the app stays display-only and never writes, but every working community implementation requests both; a bare `tasks:read` was suspected of triggering TickTick's `unknown_exception` at the consent step), **fixed redirect URI `http://127.0.0.1:14565/callback`** (pathless `:14565` was suspected of breaking authorize — openapi-cli always uses `/callback`). Token POST uses **HTTP Basic auth** (client_id:client_secret) + a `scope` parameter in the body (verified against ticktick-py + ticktick-openapi-cli). Self-serve app registration at `developer.ticktick.com/manage` (no approval; the app's **App Service URL must be set to `http://127.0.0.1:14565/callback`** on the exact record whose Client ID is in `.env` — multiple app records can exist). Tokens: access ~2h + refresh ~6 months; proactive refresh before expiry + one 401 retry in `runTickTickSync()`. Callback listener closes on every path (success/error/timeout) and closes a leftover listener before rebinding, so retries never EADDRINUSE on port 14565.
+- **Token store** (`src/main/storage/secure-token-store.ts`): provider-aware — `load/save/clear(provider)` with `google` keeping the existing `google-calendar.tokens` file (no token loss) and `ticktick.tokens` for the new provider.
+- **Sync service** (`src/main/sync/ticktick/ticktick-sync.ts`): plain `fetch` (no new deps). `GET /project` + `GET /project/{id}/data` (404 → skip). `taskToReminder()`: no `dueDate` → `anytime`; `isAllDay`/date-only → `all-day` at local midnight; else `timed`; `status 2` → completed; priorities 0/1/3/5 → normal/low/normal/high. Timed tasks imported inside a 60-day window. Upsert with `source: 'ticktick'` (sourceEventId = task id, sourceCalendarId = project id); status-2 tasks explicitly completed locally after upsert; tasks that disappear from the synced projects get marked completed (pruning scoped to synced project ids so deselected projects are untouched).
+- **Wiring** (`src/main/index.ts`): `ticktick:status/connect/select-projects/refresh/disconnect` IPC; `runConfiguredSync` runs TickTick **independently of Google** (moved before the Google gate); `syncEnabled` invariant maintained across disconnects (only cleared when the *other* provider is also disconnected); read-only guard (`isExternalSource`) extended to `'ticktick'` for reminder edit/remove paths; boot restores ticktick metadata from `syncRepository.get('ticktick')`.
+- **UI** (`src/renderer/popup/PopupApp.tsx`): "✅ TickTick Account" section — Connect button, project checkboxes (default all), sync status + age, Sync now, Disconnect, plus a display-only note. Popup height 274×416 → 274×500 with scrollable content.
+- **Env**: `TICKTICK_CLIENT_ID` / `TICKTICK_CLIENT_SECRET` added to `.env.example` (redirect URI must be `http://127.0.0.1:14565/callback`).
+- **Bug caught in review**: upsert didn't sync `kind` → removing a due date in TickTick would leave a permanently-overdue `timed` reminder (sentinel startAt). Fixed by adding `kind=excluded.kind` to the upsert (also fixes the same latent bug for Google Tasks) + explicit local completion for status-2 tasks.
+- **Tests**: `tests/shared/ticktick-sync.test.ts` (7 tests: timed/anytime/all-day×2/completed/priorities/description). 43/43 pass, `tsc --noEmit` clean, review approved (kind-drift bug fixed), app restarted 21:39 with changes live.
+
+**Pending live test**: real OAuth connect + sync — **BLOCKED**, see §23 below.
+
+### 23. TickTick OAuth debugging saga — BLOCKED (handing off to a fresh agent)
+
+Goal: connect a TickTick developer app through the popup (authorize → token → projects → tasks). All app-side code is complete, reviewed, typechecked, and tested; the blocker is TickTick's OAuth authorize step, not our code.
+
+**Error progression (in order):**
+1. `redirect_uri_mismatch` — app #1 ("cat-reminder-app", Client ID `G31d7Want36HMCBxOw`) had no App Service URL saved. User set it → retried.
+2. App-side `EADDRINUSE` on port 14565 — a failed first attempt left the loopback listener alive. FIXED in `oauth.ts` (close on every path + close leftover before bind).
+3. `{"errorCode":"unknown_exception", ...}` JSON — persisted across many variants (single scope, both scopes, no scope, pathless redirect, `/callback` redirect, fresh tabs, and the internal `api.ticktick.com/oauth/custom_authorize` endpoint the user was redirected to).
+4. With fresh app #2 (Client ID `Vds69F85a3DdvC4fGI`, secret `bDIKgfW7y6qfXLchfrP7PBeH94nZ8Q3y` — CURRENT `.env` values): `error="invalid_request", error_description="At least one redirect_uri must be registered with the client."` — a standard OAuth error meaning TickTick has NO registered redirect URI for this client. The user says the App Service URL field already shows `http://127.0.0.1:14565/callback` on the app they're editing.
+
+**What's been verified from the app side (all healthy):**
+- Authorize URL is well-formed: browser probe of `https://ticktick.com/oauth/authorize?client_id=<ID>&redirect_uri=http%3A%2F%2F127.0.0.1%3A14565%2Fcallback&response_type=code&scope=tasks%3Aread%20tasks%3Awrite&state=...` redirects to the normal TickTick sign-in page (client recognized, no immediate error) for BOTH app #1 and app #2.
+- Token endpoint is healthy: POST `https://ticktick.com/oauth/token` with Basic auth (current ID:secret) + `grant_type=authorization_code&code=fake_code_123&scope=tasks:read tasks:write&redirect_uri=http://127.0.0.1:14565/callback` → `invalid_grant` 400 (correct) — proves credentials + request format are accepted.
+- Typecheck clean, 43/43 tests pass, review approved (kind-drift fix). App restarted 22:17:39 with app #2 credentials.
+
+**Leads for the next agent (priority order):**
+1. **Two app records exist in developer.ticktick.com/manage.** The `.env` Client ID belongs to app #2; the user may be editing app #1's App Service URL. Have the user open app #2 specifically, confirm the field, and SAVE. Most likely cause of the `invalid_request` error.
+2. If editing doesn't persist: delete app #2 and recreate it WITH the App Service URL filled in at creation time.
+3. TickTick's flow internally routes through `https://api.ticktick.com/oauth/custom_authorize` — if a properly-configured app still errors, the validated redirect field may be named differently than "App Service URL".
+4. GitHub issue `liadgez/ticktick-mcp-server#1` documents the SAME `unknown_exception` envelope (`errorId …@erver-14/15`) as ongoing TickTick server-side Open API breakage (since 2025). If a clean, correctly-configured app still throws it, TickTick's OAuth is down upstream → fallback: TickTick's Google Calendar bridge (NOTE: only syncs tasks *with time attributes*, so date-less tasks won't reach the app — the Open API remains the primary path for the daily roll-up).
+5. Reference implementations that WORK with real accounts (byte-level comparison): `lazeroffmichael/ticktick-py` (`oauth2.py`) and `niujingjingbfsu/ticktick-openapi-cli` (`ticktick_api_cli/auth.py` + their troubleshooting docs — both use `/callback`, both scopes, Basic auth).
+
+**Security note:** `.env` is gitignored — credentials never enter the repo. Do NOT paste the secret into docs.
+
 ## Work completed this session (August 2, 2026) — daily task roll-up
 
 ### 21. Daily task roll-up: time-less reminders shown as one cat overlay at a configurable daily time

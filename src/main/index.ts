@@ -21,9 +21,12 @@ import { SecureTokenStore } from './storage/secure-token-store'
 import { createGoogleCalendarClient, GoogleCalendarSyncService } from './sync/google/calendar-sync'
 import { createGoogleTasksClient, GoogleTasksSyncService } from './sync/google/tasks-sync'
 import { exchangeGoogleCode, openGoogleAuthorization } from './sync/google/oauth'
+import { TickTickSyncService, createTickTickClient } from './sync/ticktick/ticktick-sync'
+import { exchangeTickTickCode, openTickTickAuthorization, refreshTickTickAccessToken, type TickTickTokens } from './sync/ticktick/oauth'
 import type { CalendarInfo } from '../shared/types/calendar'
 import type { GoogleTaskList } from './sync/google/tasks-sync'
-import type { SyncStatus } from '../shared/types/sync'
+import type { SyncStatus, TickTickSyncStatus } from '../shared/types/sync'
+import type { TickTickProject, TickTickSyncResult } from '../shared/types/ticktick'
 import { isCreateReminderInput, isPreferencesPatch, isReminderAction, isReminderId, isUpdateReminderInput } from '../shared/validation/runtime'
 import type { CreateReminderInput } from '../shared/types/reminder'
 
@@ -39,6 +42,10 @@ let taskListCache: GoogleTaskList[] = []
 let lastSyncAt: string | undefined
 let syncError: string | undefined
 let syncTimer: NodeJS.Timeout | undefined
+let ticktickProjectCache: TickTickProject[] = []
+let selectedTicktickProjectIds: string[] = []
+let ticktickLastSyncAt: string | undefined
+let ticktickSyncError: string | undefined
 let rollupRepository: DailyTaskRollupRepository
 let taskRollupScheduler: TaskRollupScheduler
 let rollupTimer: NodeJS.Timeout | undefined
@@ -83,10 +90,13 @@ function googleClientConfig(tokens: NonNullable<ReturnType<typeof tokenStore.loa
 
 async function runConfiguredSync(): Promise<void> {
   const preferences = preferencesRepository.get()
+  if (!preferences.syncEnabled) return
+  // TickTick sync is independent of Google (no-op when not connected)
+  await runTickTickSync()
   const tokens = tokenStore.load()
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  if (!preferences.syncEnabled || !tokens || !clientId || !clientSecret) return
+  if (!tokens || !clientId || !clientSecret) return
   try {
     const config = googleClientConfig(tokens)
     const calendarClient = createGoogleCalendarClient(config)
@@ -110,7 +120,7 @@ async function runConfiguredSync(): Promise<void> {
     }
 
     lastSyncAt = new Date().toISOString()
-    syncRepository.save({ selectedCalendarIds: calendarSelected, selectedTaskListIds: taskSelected, lastSuccessAt: lastSyncAt })
+    syncRepository.save({ selectedCalendarIds: calendarSelected, selectedTaskListIds: taskSelected, selectedTicktickProjectIds, lastSuccessAt: lastSyncAt })
     syncError = undefined
     logger.info('Google sync completed', { calendars: calendarSelected.length, taskLists: taskSelected.length })
   } catch (error) {
@@ -119,8 +129,69 @@ async function runConfiguredSync(): Promise<void> {
   }
 }
 
-function isGoogleSource(source: string): boolean {
-  return source === 'google-calendar' || source === 'google-tasks'
+function isExternalSource(source: string): boolean {
+  return source === 'google-calendar' || source === 'google-tasks' || source === 'ticktick'
+}
+
+function ticktickStatus(): TickTickSyncStatus {
+  return {
+    connected: Boolean(tokenStore.load('ticktick')),
+    projects: ticktickProjectCache,
+    selectedProjectIds: selectedTicktickProjectIds,
+    lastSyncAt: ticktickLastSyncAt,
+    error: ticktickSyncError
+  }
+}
+
+async function ticktickTokens(): Promise<TickTickTokens | null> {
+  const tokens = tokenStore.load('ticktick')
+  if (!tokens) return null
+  const clientId = process.env.TICKTICK_CLIENT_ID
+  const clientSecret = process.env.TICKTICK_CLIENT_SECRET
+  if (!clientId || !clientSecret || !tokens.refreshToken) return tokens
+  // Proactively refresh before expiry (TickTick access tokens last ~2h; refresh tokens ~6 months).
+  if (tokens.expiryDate && Date.now() >= tokens.expiryDate - 60_000) {
+    try {
+      const refreshed = await refreshTickTickAccessToken({ clientId, clientSecret }, tokens.refreshToken)
+      tokenStore.save(refreshed, 'ticktick')
+      return refreshed
+    } catch (error) {
+      logger.error('TickTick token refresh failed', error)
+      return null
+    }
+  }
+  return tokens
+}
+
+/** Runs one TickTick sync pass, transparently refreshing the token and retrying once on a 401. */
+async function runTickTickSync(): Promise<TickTickSyncResult | null> {
+  const clientId = process.env.TICKTICK_CLIENT_ID
+  const clientSecret = process.env.TICKTICK_CLIENT_SECRET
+  if (!clientId || !clientSecret) return null
+  const tokens = await ticktickTokens()
+  if (!tokens || selectedTicktickProjectIds.length === 0) return null
+  const config = { clientId, clientSecret }
+  const syncWithToken = (accessToken: string) =>
+    new TickTickSyncService(reminderRepository, createTickTickClient({ accessToken })).sync(selectedTicktickProjectIds)
+  try {
+    let result: TickTickSyncResult
+    try {
+      result = await syncWithToken(tokens.accessToken)
+    } catch (error) {
+      // One retry with a freshly refreshed token when the current one was rejected.
+      if (!(error instanceof Error) || !error.message.includes('401') || !tokens.refreshToken) throw error
+      const refreshed = await refreshTickTickAccessToken(config, tokens.refreshToken)
+      tokenStore.save(refreshed, 'ticktick')
+      result = await syncWithToken(refreshed.accessToken)
+    }
+    ticktickLastSyncAt = result.syncedAt
+    ticktickSyncError = undefined
+    return result
+  } catch (error) {
+    ticktickSyncError = error instanceof Error ? error.message : 'TickTick sync failed.'
+    logger.error('TickTick sync failed', error)
+    return null
+  }
 }
 
 function registerIpc(): void {
@@ -135,8 +206,8 @@ function registerIpc(): void {
     if (!isReminderId(id) || !isUpdateReminderInput(input)) throw new Error('Invalid reminder update.')
     const current = reminderRepository.get(id)
     if (!current) return null
-    if (isGoogleSource(current.source) && Object.keys(input).some((key) => key !== 'enabled')) {
-      throw new Error('Synced reminders are read-only. Disable or manage this item in Google.')
+    if (isExternalSource(current.source) && Object.keys(input).some((key) => key !== 'enabled')) {
+      throw new Error('Synced reminders are read-only. Manage the item in its source app.')
     }
     const errors = validateReminderInput({ ...current, ...input })
     if (errors.length) throw new Error(errors.join(' '))
@@ -145,7 +216,7 @@ function registerIpc(): void {
   ipcMain.handle('reminders:remove', (_event, id: unknown) => {
     if (!isReminderId(id)) throw new Error('Invalid reminder ID.')
     const reminder = reminderRepository.get(id)
-    if (reminder && isGoogleSource(reminder.source)) throw new Error('Synced reminders are read-only. Remove this item in Google.')
+    if (reminder && isExternalSource(reminder.source)) throw new Error('Synced reminders are read-only. Remove this item in its source app.')
     return reminderRepository.remove(id)
   })
   ipcMain.handle('reminders:action', (_event, id: unknown, action: unknown) => {
@@ -164,6 +235,55 @@ function registerIpc(): void {
     const updated = reminderRepository.update(id, complete(current))
     applyRecurringAdvance(current)
     return updated
+  })
+  ipcMain.handle('ticktick:status', () => ticktickStatus())
+  ipcMain.handle('ticktick:connect', async () => {
+    const clientId = process.env.TICKTICK_CLIENT_ID
+    const clientSecret = process.env.TICKTICK_CLIENT_SECRET
+    if (!clientId || !clientSecret) throw new Error('TickTick credentials are not configured. Add TICKTICK_CLIENT_ID and TICKTICK_CLIENT_SECRET to your .env file.')
+    try {
+      const { code } = await openTickTickAuthorization({ clientId, clientSecret })
+      logger.info('TickTick authorization callback received', { codeLength: code.length })
+      const tokens = await exchangeTickTickCode({ clientId, clientSecret }, code)
+      logger.info('TickTick token exchange succeeded')
+      tokenStore.save(tokens, 'ticktick')
+      const client = createTickTickClient({ accessToken: tokens.accessToken })
+      ticktickProjectCache = await client.listProjects()
+      logger.info('TickTick projects fetched', { count: ticktickProjectCache.length })
+    } catch (error) {
+      logger.error('TickTick connect failed', error instanceof Error ? { message: error.message } : error)
+      tokenStore.clear('ticktick')
+      throw error
+    }
+    selectedTicktickProjectIds = ticktickProjectCache.map((project) => project.id)
+    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds }, 'ticktick')
+    preferencesRepository.update({ syncEnabled: true })
+    await runTickTickSync()
+    return ticktickStatus()
+  })
+  ipcMain.handle('ticktick:select-projects', (_event, projectIds: unknown) => {
+    if (!Array.isArray(projectIds) || projectIds.some((id) => typeof id !== 'string')) throw new Error('Invalid project selection.')
+    const known = new Set(ticktickProjectCache.map((project) => project.id))
+    if (projectIds.some((id) => !known.has(id))) throw new Error('Unknown TickTick project.')
+    selectedTicktickProjectIds = projectIds
+    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds, lastSuccessAt: ticktickLastSyncAt }, 'ticktick')
+    return ticktickStatus()
+  })
+  ipcMain.handle('ticktick:refresh', async () => {
+    const result = await runTickTickSync()
+    if (!result) throw new Error(ticktickSyncError ?? 'Connect your TickTick account before syncing.')
+    return result
+  })
+  ipcMain.handle('ticktick:disconnect', () => {
+    tokenStore.clear('ticktick')
+    syncRepository.clear('ticktick')
+    ticktickProjectCache = []
+    selectedTicktickProjectIds = []
+    ticktickLastSyncAt = undefined
+    ticktickSyncError = undefined
+    // Keep auto-sync running if Google is still connected.
+    if (!tokenStore.load()) preferencesRepository.update({ syncEnabled: false })
+    return ticktickStatus()
   })
   ipcMain.handle('preferences:get', () => preferencesRepository.get())
   ipcMain.handle('sync:status', (): SyncStatus => ({
@@ -192,7 +312,7 @@ function registerIpc(): void {
     taskListCache = await tasksClient.listTaskLists()
     selectedTaskListIds = taskListCache.map((list) => list.id)
 
-    syncRepository.save({ selectedCalendarIds, selectedTaskListIds })
+    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds })
     syncError = undefined
 
     // Run initial sync immediately
@@ -203,14 +323,14 @@ function registerIpc(): void {
       await new GoogleTasksSyncService(reminderRepository, tasksClient).sync(selectedTaskListIds)
     }
     lastSyncAt = new Date().toISOString()
-    syncRepository.save({ selectedCalendarIds: selectedCalendarIds, selectedTaskListIds, lastSuccessAt: lastSyncAt })
+    syncRepository.save({ selectedCalendarIds: selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds, lastSuccessAt: lastSyncAt })
 
     return { connected: true, calendars: calendarCache }
   })
   ipcMain.handle('sync:select-calendars', (_event, calendarIds: unknown) => {
     if (!Array.isArray(calendarIds) || calendarIds.some((id) => typeof id !== 'string')) throw new Error('Invalid calendar selection.')
     selectedCalendarIds = calendarIds
-    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, lastSuccessAt: lastSyncAt })
+    syncRepository.save({ selectedCalendarIds, selectedTaskListIds, selectedTicktickProjectIds, lastSuccessAt: lastSyncAt })
     return { connected: Boolean(tokenStore.load()), calendars: calendarCache, selectedCalendarIds, lastSyncAt, error: syncError }
   })
   ipcMain.handle('sync:refresh', async () => {
@@ -241,7 +361,7 @@ function registerIpc(): void {
       selectedCalendarIds = calendarSelected
       selectedTaskListIds = taskSelected
       lastSyncAt = calendarResult.syncedAt
-      syncRepository.save({ selectedCalendarIds: calendarSelected, selectedTaskListIds: taskSelected, lastSuccessAt: lastSyncAt })
+      syncRepository.save({ selectedCalendarIds: calendarSelected, selectedTaskListIds: taskSelected, selectedTicktickProjectIds, lastSuccessAt: lastSyncAt })
       syncError = undefined
 
       return {
@@ -259,7 +379,8 @@ function registerIpc(): void {
   ipcMain.handle('sync:disconnect', () => {
     tokenStore.clear()
     syncRepository.clear()
-    preferencesRepository.update({ syncEnabled: false })
+    // Keep auto-sync running if TickTick is still connected.
+    if (!tokenStore.load('ticktick')) preferencesRepository.update({ syncEnabled: false })
     calendarCache = []
     taskListCache = []
     selectedCalendarIds = []
@@ -358,6 +479,9 @@ async function boot(): Promise<void> {
   selectedCalendarIds = syncMetadata.selectedCalendarIds
   selectedTaskListIds = syncMetadata.selectedTaskListIds
   lastSyncAt = syncMetadata.lastSuccessAt
+  const ticktickMetadata = syncRepository.get('ticktick')
+  selectedTicktickProjectIds = ticktickMetadata.selectedTicktickProjectIds
+  ticktickLastSyncAt = ticktickMetadata.lastSuccessAt
 
   // Set default sync interval to 5 minutes if not already configured
   const prefs = preferencesRepository.get()

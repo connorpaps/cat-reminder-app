@@ -22,6 +22,13 @@ const api: CatReminderApi = {
     refresh: () => ipcRenderer.invoke('sync:refresh'),
     disconnect: () => ipcRenderer.invoke('sync:disconnect')
   },
+  ticktick: {
+    status: () => ipcRenderer.invoke('ticktick:status'),
+    connect: () => ipcRenderer.invoke('ticktick:connect'),
+    selectProjects: (projectIds: string[]) => ipcRenderer.invoke('ticktick:select-projects', projectIds),
+    refresh: () => ipcRenderer.invoke('ticktick:refresh'),
+    disconnect: () => ipcRenderer.invoke('ticktick:disconnect')
+  },
   app: {
     openSettings: () => ipcRenderer.invoke('app:open-settings'),
     showTestOverlay: () => ipcRenderer.invoke('app:test-overlay'),
